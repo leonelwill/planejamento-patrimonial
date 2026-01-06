@@ -9,27 +9,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS Personalizado (Estilo Dark e Títulos Brancos) ---
+# --- CSS Personalizado ---
 st.markdown("""
     <style>
-    /* Forçar cor branca nos títulos principais */
-    h1, h2, h3, h4 {
+    /* 1. Título Centralizado e Branco */
+    h1 {
+        text-align: center;
+        color: #FFFFFF !important;
+        padding-bottom: 20px;
+    }
+    h2, h3, h4 {
         color: #FFFFFF !important;
     }
-    /* Ajuste de métricas para destacar valores */
+    /* Ajuste de métricas */
     div[data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-        color: #00FF7F; /* Verde Primavera para valores positivos */
+        font-size: 1.6rem;
+        color: #00FF7F; 
     }
-    /* Fundo dos cards de aviso */
-    .stAlert {
-        background-color: #2b2b2b;
-        color: #ddd;
+    /* Estilo para o Texto do Cliente */
+    .client-box {
+        background-color: #1E1E1E;
+        padding: 25px;
+        border-radius: 10px;
+        border-left: 5px solid #FFD700;
+        margin-top: 20px;
     }
-    /* Estilizar o expander do roteiro */
-    .streamlit-expanderHeader {
+    .client-text {
+        color: #E0E0E0;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+    .highlight {
+        color: #FF4B4B;
         font-weight: bold;
-        color: #FFD700 !important; /* Dourado */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -38,43 +50,23 @@ st.markdown("""
 def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def calcular_itcmd_progressivo(valor_base):
+def obter_aliquota_pl_sp_fixa(valor_base):
     """
-    Calcula o ITCMD progressivo baseado no PL n.7/2024 (SP).
-    Lógica de faixas (cálculo marginal).
+    Define a alíquota baseada na faixa do valor total (Progressividade Simples/Tabela).
+    Não é cálculo marginal, é alíquota sobre o total dependendo de onde cai.
+    Valores baseados em UFESPs aproximadas do PL.
     """
-    faixa_1_limite = 353600.00      # 2%
-    faixa_2_limite = 3005600.00     # 4%
-    faixa_3_limite = 9900800.00     # 6%
-    # Acima disso 8%
+    if valor_base <= 353600.00:
+        return 2.0
+    elif valor_base <= 3005600.00:
+        return 4.0
+    elif valor_base <= 9900800.00:
+        return 6.0
+    else:
+        return 8.0
 
-    imposto = 0.0
-
-    # Faixa 1: Até 353k
-    if valor_base > 0:
-        base_faixa_1 = min(valor_base, faixa_1_limite)
-        imposto += base_faixa_1 * 0.02
-    
-    # Faixa 2: 353k a 3MM
-    if valor_base > faixa_1_limite:
-        base_faixa_2 = min(valor_base, faixa_2_limite) - faixa_1_limite
-        imposto += base_faixa_2 * 0.04
-        
-    # Faixa 3: 3MM a 9.9MM
-    if valor_base > faixa_2_limite:
-        base_faixa_3 = min(valor_base, faixa_3_limite) - faixa_2_limite
-        imposto += base_faixa_3 * 0.06
-        
-    # Faixa 4: Acima de 9.9MM
-    if valor_base > faixa_3_limite:
-        base_faixa_4 = valor_base - faixa_3_limite
-        imposto += base_faixa_4 * 0.08
-        
-    return imposto
-
-# --- Cabeçalho ---
+# --- Título Centralizado ---
 st.title("Calculadora de Planejamento Patrimonial")
-st.markdown("---")
 
 # --- Colunas Principais ---
 col_patrimonio, col_custos = st.columns([1, 1.2], gap="large")
@@ -84,23 +76,25 @@ col_patrimonio, col_custos = st.columns([1, 1.2], gap="large")
 # ==========================================================
 with col_patrimonio:
     st.subheader("1. Levantamento Patrimonial")
+    st.caption("Digite os valores (o formato R$ aparece após confirmar)")
     
-    val_imoveis = st.number_input("Imóveis", min_value=0.0, step=50000.0, format="%.2f")
-    val_aplicacoes = st.number_input("Aplicações Financeiras", min_value=0.0, step=10000.0, format="%.2f")
-    val_veiculos = st.number_input("Veículos", min_value=0.0, step=5000.0, format="%.2f")
-    val_empresas = st.number_input("Participação em Empresas", min_value=0.0, step=50000.0, format="%.2f")
-    val_outros = st.number_input("Outros Bens", min_value=0.0, step=5000.0, format="%.2f")
+    # Inputs formatados para exibir separadores de milhar após o Enter
+    val_imoveis = st.number_input("Imóveis", min_value=0.0, step=100000.0, format="%.2f")
+    val_aplicacoes = st.number_input("Aplicações Financeiras", min_value=0.0, step=50000.0, format="%.2f")
+    val_veiculos = st.number_input("Veículos", min_value=0.0, step=10000.0, format="%.2f")
+    val_empresas = st.number_input("Participação em Empresas", min_value=0.0, step=100000.0, format="%.2f")
+    val_outros = st.number_input("Outros Bens", min_value=0.0, step=10000.0, format="%.2f")
     
     st.markdown("### Previdência Privada *")
     col_prev_input, col_prev_check = st.columns([0.7, 0.3])
     with col_prev_input:
-        val_previdencia = st.number_input("Saldo em Previdência", min_value=0.0, step=10000.0, format="%.2f")
+        val_previdencia = st.number_input("Saldo em Previdência", min_value=0.0, step=50000.0, format="%.2f")
     with col_prev_check:
-        st.write("") # Espaçamento
+        st.write("") 
         st.write("")
-        incluir_prev = st.checkbox("Incluir no Inventário?", value=False)
+        incluir_prev = st.checkbox("Incluir?", value=False)
     
-    st.info("* Como padrão, a previdência privada (VGBL) não entra no cálculo de inventário, porém isso depende da legislação estadual e da estrutura do plano (PGBL vs VGBL).")
+    st.info("* Obs: Como padrão, a previdência privada não entra no cálculo de inventário, porém depende de cada estado.")
 
     # Cálculo do Total Patrimonial
     total_patrimonio = val_imoveis + val_aplicacoes + val_veiculos + val_empresas + val_outros
@@ -116,154 +110,171 @@ with col_patrimonio:
 with col_custos:
     st.subheader("2. Custos de Sucessão")
     
-    # Seleção de Estado
-    col_estado, col_toggle = st.columns([1, 1])
-    with col_estado:
+    # Seleção de Estado e Botão PL na mesma linha para economizar espaço
+    col_uf, col_pl = st.columns([1, 1])
+    with col_uf:
         estados = ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"]
-        estado_selecionado = st.selectbox("Selecione o Estado:", estados)
+        estado_selecionado = st.selectbox("Estado Base:", estados)
     
-    # Definição da Alíquota Padrão por Estado
-    aliquota_padrao = 4.0
-    if estado_selecionado == "Rio de Janeiro (RJ)":
-        aliquota_padrao = 4.0 
-    elif estado_selecionado == "Minas Gerais (MG)":
-        aliquota_padrao = 5.0
-    
-    # Botão de Pânico (PL 7/2024)
-    with col_toggle:
+    with col_pl:
+        st.write("") # Espaço para alinhar verticalmente
         st.write("") 
-        st.write("")
-        usar_progressivo = st.toggle("⚠️ Simular PL n.7/2024 (SP)?")
-    
-    if usar_progressivo:
-        st.warning(f"Simulação PL 7/2024 (SP) Ativada: Alíquotas progressivas de 2% a 8%.")
-        valor_itcmd = calcular_itcmd_progressivo(total_patrimonio)
-        # Evitar divisão por zero para exibição
-        aliquota_itcmd_exibicao = (valor_itcmd / total_patrimonio * 100) if total_patrimonio > 0 else 0.0
-    else:
-        aliquota_itcmd_exibicao = aliquota_padrao
-        valor_itcmd = total_patrimonio * (aliquota_itcmd_exibicao / 100)
+        # Botão PL - Se ativo, recalculamos a sugestão de alíquota
+        usar_pl = st.toggle("Simular PL n.7/2024 (SP)?")
 
-    # Tabela de Custos
-    st.markdown("#### Detalhamento de Custos")
-    col_c1, col_c2, col_c3 = st.columns([2, 1, 1.5])
-    
-    # Cabeçalhos
-    with col_c1: st.write("**Item**")
-    with col_c2: st.write("**%**")
-    with col_c3: st.write("**Valor (R$)**")
-    
-    # Linha 1: ITCMD
-    with col_c1: st.markdown("ITCMD (Imposto)")
-    with col_c2:
-        if usar_progressivo:
-            st.write(f"~{aliquota_itcmd_exibicao:.2f}%") 
+    # --- Lógica de Alíquotas ---
+    # 1. Define a alíquota SUGERIDA baseada na escolha (Estado ou PL)
+    if usar_pl:
+        aliquota_sugerida = obter_aliquota_pl_sp_fixa(total_patrimonio)
+        texto_aviso = f"Pelo valor do patrimônio, a alíquota na nova tabela seria **{aliquota_sugerida}%**."
+        cor_aviso = "warning"
+    else:
+        # Lógica padrão dos estados
+        if estado_selecionado == "Rio de Janeiro (RJ)":
+            aliquota_sugerida = 4.0 # Deixamos 4 como base, mas RJ tem progressiva também
+        elif estado_selecionado == "Minas Gerais (MG)":
+            aliquota_sugerida = 5.0
         else:
-            aliquota_itcmd_input = st.number_input("Alíquota ITCMD", value=aliquota_padrao, step=0.5, label_visibility="collapsed", key="aliq_itcmd")
-            valor_itcmd = total_patrimonio * (aliquota_itcmd_input / 100)
-    with col_c3:
-        st.write(format_currency(valor_itcmd))
-        
-    # Linha 2: Honorários
-    with col_c1: st.markdown("Honorários Advocatícios")
-    with col_c2:
-        aliquota_adv = st.number_input("Aliq. Adv", value=6.0, step=0.5, label_visibility="collapsed", key="aliq_adv")
-    with col_c3:
-        valor_adv = total_patrimonio * (aliquota_adv / 100)
-        st.write(format_currency(valor_adv))
-        
-    # Linha 3: Cartório/Outros
-    with col_c1: st.markdown("Custos Cartório/Outros")
-    with col_c2:
-        aliquota_cart = st.number_input("Aliq. Cart", value=2.0, step=0.5, label_visibility="collapsed", key="aliq_cart")
-    with col_c3:
-        valor_cart = total_patrimonio * (aliquota_cart / 100)
-        st.write(format_currency(valor_cart))
+            aliquota_sugerida = 4.0
+        texto_aviso = None
+
+    # --- Tabela de Custos Alinhada ---
+    st.markdown("#### Detalhamento de Custos")
+    
+    # Se houver aviso de mudança de alíquota pelo PL
+    if usar_pl:
+        st.caption(f"⚠️ {texto_aviso}")
+
+    # Cabeçalho da Tabela
+    c_head1, c_head2, c_head3 = st.columns([3, 1.5, 2])
+    c_head1.markdown("**Item**")
+    c_head2.markdown("**Alíquota (%)**")
+    c_head3.markdown("**Valor (R$)**")
+
+    # --- Linha 1: ITCMD ---
+    c_itcmd1, c_itcmd2, c_itcmd3 = st.columns([3, 1.5, 2])
+    with c_itcmd1:
+        st.write("ITCMD (Imposto Estadual)")
+    with c_itcmd2:
+        # O valor padrão vem da lógica acima, mas o usuário PODE editar sempre
+        aliquota_itcmd = st.number_input(
+            "Aliq ITCMD", 
+            value=float(aliquota_sugerida), 
+            step=0.5, 
+            label_visibility="collapsed",
+            key="input_itcmd"
+        )
+    with c_itcmd3:
+        val_itcmd = total_patrimonio * (aliquota_itcmd / 100)
+        st.write(f"**{format_currency(val_itcmd)}**")
+
+    # --- Linha 2: Honorários ---
+    c_hon1, c_hon2, c_hon3 = st.columns([3, 1.5, 2])
+    with c_hon1:
+        st.write("Honorários Advocatícios")
+    with c_hon2:
+        aliquota_hon = st.number_input(
+            "Aliq Hon", 
+            value=6.0, 
+            step=0.5, 
+            label_visibility="collapsed", 
+            key="input_hon"
+        )
+    with c_hon3:
+        val_hon = total_patrimonio * (aliquota_hon / 100)
+        st.write(f"{format_currency(val_hon)}")
+
+    # --- Linha 3: Cartório/Outros ---
+    c_cart1, c_cart2, c_cart3 = st.columns([3, 1.5, 2])
+    with c_cart1:
+        st.write("Custos Cartório/Outros")
+    with c_cart2:
+        aliquota_cart = st.number_input(
+            "Aliq Cart", 
+            value=2.0, 
+            step=0.5, 
+            label_visibility="collapsed", 
+            key="input_cart"
+        )
+    with c_cart3:
+        val_cart = total_patrimonio * (aliquota_cart / 100)
+        st.write(f"{format_currency(val_cart)}")
 
     st.divider()
-    
-    # Totais Finais
-    custo_total = valor_itcmd + valor_adv + valor_cart
-    percentual_perda = (custo_total / total_patrimonio * 100) if total_patrimonio > 0 else 0
-    
-    # Caixa de destaque final
+
+    # --- Totais ---
+    custo_total = val_itcmd + val_hon + val_cart
+    percentual_total = (custo_total / total_patrimonio * 100) if total_patrimonio > 0 else 0
+
+    # Box de Destaque
     st.markdown(
         f"""
-        <div style="background-color: #4a1515; padding: 20px; border-radius: 10px; border: 1px solid #ff4b4b; text-align: center;">
-            <h3 style="color: white; margin:0;">Custo Total do Inventário</h3>
-            <h1 style="color: #ff4b4b; margin:10px 0; font-size: 2.5rem;">{format_currency(custo_total)}</h1>
-            <p style="color: #ddd; margin:0; font-size: 1.1rem;">Isso representa <b>{percentual_perda:.2f}%</b> do seu patrimônio atual.</p>
+        <div style="background-color: #4a1515; padding: 15px; border-radius: 8px; border: 1px solid #ff4b4b; text-align: center;">
+            <p style="color: white; margin:0; font-size: 1.2rem;">Custo Total Estimado</p>
+            <h1 style="color: #ff4b4b; margin: 5px 0; font-size: 2.8rem;">{format_currency(custo_total)}</h1>
+            <p style="color: #ddd; margin:0;">Comprometimento Patrimonial: <b>{percentual_total:.2f}%</b></p>
         </div>
         """, 
         unsafe_allow_html=True
     )
     
-    if usar_progressivo:
-        itcmd_antigo = total_patrimonio * 0.04 # Comparando com a base de 4%
-        diferenca = valor_itcmd - itcmd_antigo
-        if diferenca > 0:
-            st.error(f"🚨 A MUDANÇA NA LEI AUMENTARIA SEU CUSTO EM: {format_currency(diferenca)}")
+    # Comparativo PL (Delta)
+    if usar_pl:
+        # Comparar com o cenário base de 4% (SP padrão atual)
+        custo_base = total_patrimonio * 0.04
+        delta = val_itcmd - custo_base
+        if delta > 0:
+            st.error(f"📈 Impacto da Nova Lei: Aumento de {format_currency(delta)} apenas em impostos.")
 
 # ==========================================================
-# SEÇÃO 3: CENÁRIO GLOBAL (GRÁFICO)
+# SEÇÃO 3: GRÁFICO GLOBAL
 # ==========================================================
 st.write("")
-st.subheader("3. Cenário Global de Imposto sobre Herança")
+st.subheader("3. Onde você está no mundo?")
 
-# Dados para o gráfico
-aliquota_itcmd_final = (valor_itcmd / total_patrimonio * 100) if total_patrimonio > 0 else 0
-
+# Dados Gráfico
+aliquota_efetiva_imposto = aliquota_itcmd # Usamos a alíquota configurada no input
 data_paises = {
-    'País': ['Japão', 'Coreia do Sul', 'França', 'EUA', 'Reino Unido', 'Chile', 'Brasil (Sua Família)'],
-    'Alíquota Máxima (%)': [55, 50, 45, 40, 40, 25, aliquota_itcmd_final],
-    'Cor': ['Mundo', 'Mundo', 'Mundo', 'Mundo', 'Mundo', 'Mundo', 'Você']
+    'País': ['Japão', 'Coreia do Sul', 'França', 'EUA', 'Reino Unido', 'Chile', 'Brasil (Sua Simulação)'],
+    'Taxa Máxima': [55, 50, 45, 40, 40, 25, aliquota_efetiva_imposto],
+    'Tipo': ['Mundo', 'Mundo', 'Mundo', 'Mundo', 'Mundo', 'Mundo', 'Voce']
 }
-
-df_paises = pd.DataFrame(data_paises)
-df_paises = df_paises.sort_values(by='Alíquota Máxima (%)', ascending=False)
+df_paises = pd.DataFrame(data_paises).sort_values(by='Taxa Máxima', ascending=False)
 
 fig = px.bar(
-    df_paises, 
-    x='País', 
-    y='Alíquota Máxima (%)', 
-    color='Cor',
-    text_auto='.1f',
-    color_discrete_map={'Mundo': 'lightgrey', 'Você': '#ff4b4b'},
-    title='Comparativo Internacional de Imposto sobre Herança'
+    df_paises, x='País', y='Taxa Máxima', color='Tipo', text_auto='.1f',
+    color_discrete_map={'Mundo': 'gray', 'Voce': '#FF4B4B'},
+    title=None
 )
 fig.update_layout(
-    plot_bgcolor='rgba(0,0,0,0)', 
-    paper_bgcolor='rgba(0,0,0,0)', 
-    font_color='white',
-    showlegend=False,
-    yaxis=dict(showgrid=False, title=None),
-    xaxis=dict(title=None)
+    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+    font_color='white', showlegend=False, height=350,
+    yaxis=dict(showgrid=False, title=None), xaxis=dict(title=None)
 )
 st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================================
-# SEÇÃO 4: ROTEIRO DE APOIO (SCRIPT)
+# SEÇÃO 4: TEXTO PARA O CLIENTE (Diagnóstico)
 # ==========================================================
-with st.expander("📝 Roteiro de Apoio para Apresentação (Clique para abrir)"):
-    st.markdown("""
-    ### 🗣️ Sugestão de Discurso para o Cliente
-    
-    **1. O Choque de Realidade:**
-    *"Fulano, parabéns pelo patrimônio que você construiu. O que muitas pessoas ignoram é que existe um 'sócio oculto' nesses bens: o Estado e a Burocracia."*
-    
-    **2. Apresentando a Conta (Aponte para a caixa vermelha):**
-    *"Olhe para este número em vermelho. Se algo acontecesse hoje, sua família não receberia os {patrimonio}, mas sim o valor descontado desse custo de **{custo}**. Estamos falando de quase **{pct}%** do seu trabalho de vida virando pó em taxas e honorários."*
-    
-    **3. O Senso de Urgência (Use o botão PL 7/2024):**
-    *"E tem um detalhe: esse é o cenário 'barato'. Existe um projeto de lei em SP (e tendência nacional) para dobrar essa alíquota. (Clique no botão). Veja como o custo salta. A janela para proteger seu patrimônio com as regras atuais está se fechando."*
-    
-    **4. O Contexto Global (Aponte para o gráfico):**
-    *"O Brasil ainda é um paraíso fiscal para herança comparado ao Japão ou EUA. Mas a tendência é subirmos nesse gráfico. A pergunta é: você prefere planejar agora e travar os custos lá embaixo, ou deixar sua família pagar a conta cheia no futuro?"*
-    
-    **5. Fechamento:**
-    *"Existem formas legais (Holdings, Doações em vida, Previdência bem estruturada, Seguro de Vida para liquidez) de reduzir drasticamente essa conta. Posso desenhar um cenário comparativo para você?"*
-    """.format(
-        patrimonio=format_currency(total_patrimonio), 
-        custo=format_currency(custo_total),
-        pct=f"{percentual_perda:.1f}"
-    ))
+st.markdown("### 4. Diagnóstico Preliminar")
+
+texto_diagnostico = f"""
+<div class="client-box">
+    <p class="client-text">
+        Prezado(a), com base no levantamento realizado, seu patrimônio total inventariável soma 
+        <span class="highlight">{format_currency(total_patrimonio)}</span>.
+    </p>
+    <p class="client-text">
+        No cenário atual, sem um planejamento sucessório eficiente, estima-se que sua família terá que desembolsar 
+        cerca de <span class="highlight">{format_currency(custo_total)}</span> ({percentual_total:.1f}%) apenas para ter acesso aos bens. 
+        Isso exige alta liquidez imediata no momento mais delicado para a família.
+    </p>
+    <p class="client-text">
+        Além disso, observando o cenário global e o <span class="highlight">Projeto de Lei n.7/2024</span>, 
+        há uma tendência clara de aumento da carga tributária no Brasil, o que pode elevar significativamente 
+        esse custo caso a sucessão ocorra sob a nova vigência.
+        A antecipação e a estruturação (Holding, Doações, Previdência) são as únicas ferramentas para travar esses custos.
+    </p>
+</div>
+"""
+st.markdown(texto_diagnostico, unsafe_allow_html=True)
