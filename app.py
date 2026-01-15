@@ -16,9 +16,8 @@ st.set_page_config(
 )
 
 # --- DEFINIÇÃO DE CORES (PALETA BLUE TECH) ---
-COLOR_ACCENT = "#00D4FF"      # Azul Ciano Vibrante (Texto Destaque)
-COLOR_ACCENT_DIM = "#0088AA"  # Azul mais escuro (Bordas sutis)
-COLOR_BG_HEADER = "#002B36"   # Azul Petróleo Escuro (Fundo Cabeçalhos)
+COLOR_ACCENT = "#00D4FF"      # Azul Ciano Vibrante (Neon)
+COLOR_HEADER_BG = "#003C50"   # Azul Petróleo (Fundo Cabeçalho Tabela)
 COLOR_TEXT_STD = "#E0E0E0"    # Branco Gelo
 COLOR_RED = "#FF4B4B"         # Vermelho Alerta
 
@@ -45,22 +44,19 @@ st.markdown(f"""
     /* Destaques de Texto */
     .highlight {{ color: {COLOR_RED}; font-weight: bold; }}
     .highlight-blue {{ color: {COLOR_ACCENT}; font-weight: bold; }}
-
-    /* Box Solução (Estilo Azul) */
-    .solution-box {{
-        background-color: #0d1f26; /* Fundo azulado muito escuro */
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid {COLOR_ACCENT};
-        margin-top: 10px;
+    
+    /* ESTILIZAÇÃO DA TABELA (CABEÇALHO AZUL) */
+    /* Força o cabeçalho do dataframe a ser Azul Petróleo com borda Neon */
+    [data-testid="stDataFrame"] thead th {{
+        background-color: {COLOR_HEADER_BG} !important;
+        color: white !important;
+        border-bottom: 2px solid {COLOR_ACCENT} !important;
     }}
     
-    /* Tabelas e Inputs */
-    div[data-testid="stDataFrame"] {{ width: 100%; }}
+    /* Inputs numéricos e Botões */
     input {{ text-align: right; }}
-    
-    /* Ajuste de Botões */
     .stButton button {{ width: 100%; border-radius: 5px; }}
+    div[data-testid="stDataFrame"] {{ width: 100%; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -74,13 +70,12 @@ def obter_aliquota_pl_sp_fixa(valor_base):
     elif valor_base <= 9900800.00: return 6.0
     else: return 8.0
 
-# Cores para o Mapa (Mantivemos o semáforo pois é padrão universal de risco)
 def get_color_by_tax(tax):
-    if tax > 30: return '#FF4B4B' # Vermelho
-    elif tax > 10: return '#FFD700' # Amarelo
-    else: return '#00D4FF' # Azul (Seguro/Baixo) em vez de verde, para combinar
+    if tax > 30: return '#FF4B4B' 
+    elif tax > 10: return '#FFD700' 
+    else: return '#00D4FF' 
 
-# --- Gerenciamento de Estado (Salvar/Carregar) ---
+# --- Gerenciamento de Estado ---
 keys_to_save = [
     "nome_cliente", "is_casado", "nome_conjuge", 
     "ano_nasc_cliente", "ano_nasc_conjuge", "regime_casamento",
@@ -108,14 +103,11 @@ def limpar_dados():
             del st.session_state[key]
     st.rerun()
 
-# --- Classe PDF Avançada (Blue Theme) ---
+# --- Classe PDF Avançada ---
 class PDFReport(FPDF):
     def header(self):
-        # Fundo Preto da Página
         self.set_fill_color(14, 17, 23) 
         self.rect(0, 0, 297, 420, 'F') 
-        
-        # Título Principal
         self.set_font('Arial', 'B', 20)
         self.set_text_color(255, 255, 255)
         self.cell(0, 15, 'Relatório de Planejamento Patrimonial', 0, 1, 'C')
@@ -123,8 +115,7 @@ class PDFReport(FPDF):
 
     def section_title(self, title):
         self.set_font('Arial', 'B', 14)
-        # Cor Azul Ciano (RGB: 0, 212, 255)
-        self.set_text_color(0, 212, 255) 
+        self.set_text_color(0, 212, 255) # Azul Neon
         self.cell(0, 10, title, 0, 1, 'L')
         self.set_draw_color(0, 212, 255)
         self.line(10, self.get_y(), 200, self.get_y())
@@ -137,51 +128,45 @@ class PDFReport(FPDF):
             self.set_line_width(0.5)
         else:
             self.set_draw_color(60, 60, 60)
-        
-        x = self.get_x()
-        y = self.get_y()
+        x = self.get_x(); y = self.get_y()
         self.rect(x, y, 90, 25, 'FD')
-        
         self.set_xy(x+5, y+5)
-        self.set_font('Arial', '', 10)
-        self.set_text_color(200, 200, 200)
+        self.set_font('Arial', '', 10); self.set_text_color(200, 200, 200)
         self.cell(80, 5, label, 0, 2)
-        
-        self.set_font('Arial', 'B', 14)
-        self.set_text_color(255, 255, 255)
+        self.set_font('Arial', 'B', 14); self.set_text_color(255, 255, 255)
         self.cell(80, 8, value, 0, 0)
         self.set_xy(x + 95, y) 
 
     def create_table_row(self, data, header=False, zebra=False):
         if header:
-            self.set_fill_color(0, 60, 80) # Azul Petróleo header
+            self.set_fill_color(0, 60, 80) # Azul Petróleo (Igual App)
             self.set_text_color(255, 255, 255)
             self.set_font('Arial', 'B', 9)
             self.set_draw_color(0, 212, 255)
         else:
-            # Zebra: Preto vs Cinza Azulado Escuro
-            if zebra:
-                self.set_fill_color(22, 27, 34) 
-            else:
-                self.set_fill_color(14, 17, 23)
-            
+            if zebra: self.set_fill_color(22, 27, 34) 
+            else: self.set_fill_color(14, 17, 23)
             self.set_text_color(220, 220, 220)
             self.set_font('Arial', '', 9)
             self.set_draw_color(40, 40, 40)
 
+        # Ajuste de largura para acomodar "Capital Segurado"
         w = [20, 20, 40, 40, 40, 30] 
         
         for i, datum in enumerate(data):
-            # Coluna Multiplicador (Indice 5) em Azul
-            if not header and i == 5:
+            if not header and i == 5: # Multiplicador
                 self.set_text_color(0, 212, 255)
                 self.set_font('Arial', 'B', 9)
             elif not header:
                 self.set_text_color(220, 220, 220)
                 self.set_font('Arial', '', 9)
-            
             self.cell(w[i], 8, str(datum), 1, 0, 'C', True)
         self.ln()
+        
+    def add_conclusion_text(self, text):
+        self.set_font('Arial', '', 11)
+        self.set_text_color(220, 220, 220)
+        self.multi_cell(0, 7, text)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -198,28 +183,23 @@ with st.sidebar:
     if st.button("🗑️ Limpar Tudo", type="primary"):
         limpar_dados()
 
-# --- INPUTS PRINCIPAIS ---
+# --- INPUTS ---
 st.title("Calculadora de Planejamento Patrimonial")
 
 col_d1, col_d2, col_d3 = st.columns([1.5, 0.5, 1.5])
 with col_d1: nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: João", key="nome_cliente")
-with col_d2: 
-    st.write(""); st.write("")
-    is_casado = st.toggle("Casado(a)?", key="is_casado")
+with col_d2: st.write(""); st.write(""); is_casado = st.toggle("Casado(a)?", key="is_casado")
 with col_d3:
     if is_casado: nome_conjuge = st.text_input("Nome do Cônjuge", placeholder="Ex: Maria", key="nome_conjuge")
 
 col_n1, col_n2, col_n3 = st.columns([1.5, 0.5, 1.5])
 ano_atual = datetime.now().year
-idade_cliente = 0
-idade_conjuge = 0
-regime_casamento = "Separação Total de Bens"
-percentual_meacao = 0.0
+idade_cliente = 0; idade_conjuge = 0
+regime_casamento = "Separação Total de Bens"; percentual_meacao = 0.0
 
 with col_n1:
     ano_nasc_cliente = st.number_input("Ano Nasc. (Cliente)", 1920, ano_atual, 1975, key="ano_nasc_cliente")
     idade_cliente = ano_atual - ano_nasc_cliente
-
 with col_n3:
     if is_casado:
         c1, c2 = st.columns(2)
@@ -228,10 +208,8 @@ with col_n3:
             idade_conjuge = ano_atual - ano_nasc_conjuge
         with c2:
             regime_casamento = st.selectbox("Regime", ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Separação Total de Bens", "Participação Final nos Aquestos"], key="regime_casamento")
-            if regime_casamento in ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Participação Final nos Aquestos"]:
-                percentual_meacao = 0.50
-            else:
-                percentual_meacao = 0.0
+            if regime_casamento in ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Participação Final nos Aquestos"]: percentual_meacao = 0.50
+            else: percentual_meacao = 0.0
 
 st.markdown("---")
 
@@ -246,16 +224,12 @@ with col_pat:
     val_veiculos = st.number_input("Veículos", 0.0, step=100000.0, format="%.2f", key="v_veiculos")
     val_empresas = st.number_input("Part. Empresas", 0.0, step=100000.0, format="%.2f", key="v_empresas")
     val_outros = st.number_input("Outros Bens", 0.0, step=100000.0, format="%.2f", key="v_outros")
-    
     c_prev, c_chk = st.columns([0.7, 0.3])
     with c_prev: val_prev = st.number_input("Previdência Privada", 0.0, step=100000.0, format="%.2f", key="v_prev")
-    with c_chk: 
-        st.write(""); st.write("")
-        incluir_prev = st.checkbox("Incluir?", False, key="incluir_prev")
+    with c_chk: st.write(""); st.write(""); incluir_prev = st.checkbox("Incluir?", False, key="incluir_prev")
 
     total_patrimonio_bruto = val_imoveis + val_aplicacoes + val_veiculos + val_empresas + val_outros
     if incluir_prev: total_patrimonio_bruto += val_prev
-
     valor_meacao = total_patrimonio_bruto * percentual_meacao
     base_calculo_imposto = total_patrimonio_bruto - valor_meacao
 
@@ -269,9 +243,7 @@ with col_cus:
     st.subheader("2. Custos de Sucessão")
     c_uf, c_pl = st.columns(2)
     with c_uf: estado_selecionado = st.selectbox("Estado", ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"], key="estado_selecionado")
-    with c_pl: 
-        st.write(""); st.write("")
-        usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
+    with c_pl: st.write(""); st.write(""); usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
 
     if 'ultimo_estado_pl' not in st.session_state: st.session_state.ultimo_estado_pl = usar_pl
     if 'aliq_itcmd_input' not in st.session_state: st.session_state.aliq_itcmd_input = 4.0
@@ -279,7 +251,6 @@ with col_cus:
     val_sugerido = 4.0
     if usar_pl: val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
     elif estado_selecionado == "Minas Gerais (MG)": val_sugerido = 5.0
-    
     if st.session_state.ultimo_estado_pl != usar_pl:
         st.session_state.aliq_itcmd_input = val_sugerido
         st.session_state.ultimo_estado_pl = usar_pl
@@ -311,17 +282,12 @@ with col_cus:
             <p style="color: #ddd; margin:0;">Comprometimento: <b>{pct_total:.2f}%</b></p>
         </div>
     """, unsafe_allow_html=True)
-    
     if usar_pl and (base_calculo_imposto * (aliq_itcmd/100)) > (base_calculo_imposto * 0.04):
         st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency((base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04))}")
 
 # SEÇÃO 3: CENÁRIO GLOBAL
 st.write(""); st.subheader("3. Cenário Global")
-data_globo = [
-    {"pais": "Japão", "tax": 55}, {"pais": "Coreia do Sul", "tax": 50}, {"pais": "França", "tax": 45},
-    {"pais": "EUA", "tax": 40}, {"pais": "Reino Unido", "tax": 40}, {"pais": "Brasil (Você)", "tax": aliq_itcmd},
-    {"pais": "Chile", "tax": 25}, {"pais": "Argentina", "tax": 5}
-]
+data_globo = [{"pais": "Japão", "tax": 55}, {"pais": "Coreia do Sul", "tax": 50}, {"pais": "França", "tax": 45}, {"pais": "EUA", "tax": 40}, {"pais": "Reino Unido", "tax": 40}, {"pais": "Brasil (Você)", "tax": aliq_itcmd}, {"pais": "Chile", "tax": 25}, {"pais": "Argentina", "tax": 5}]
 df_globo = pd.DataFrame(data_globo).sort_values('tax')
 df_globo['color'] = df_globo['tax'].apply(get_color_by_tax)
 fig = px.bar(df_globo, x='tax', y='pais', orientation='h', text='tax', title="Ranking Alíquotas Máximas")
@@ -332,7 +298,6 @@ st.plotly_chart(fig, use_container_width=True)
 # SEÇÃO 5: SOLUÇÃO
 st.markdown("---")
 st.subheader("🛠️ Solução: Liquidez e Multiplicador")
-
 c_s1, c_s2, c_s3 = st.columns(3)
 with c_s1: cob_sugerida = st.number_input("Capital Segurado", value=custo_total, step=50000.0, format="%.2f", key="cobertura_sugerida")
 with c_s2: anos_pag = st.slider("Anos Pagamento", 1, 30, 10, key="anos_pagamento")
@@ -344,9 +309,7 @@ st.write("### 📈 Evolução")
 if 'simulacao_anos' not in st.session_state: st.session_state.simulacao_anos = 16
 
 data_sim = []
-cap_curr = cob_sugerida
-prem_curr = premio
-acum = 0.0
+cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
 for i in range(1, st.session_state.simulacao_anos + 1):
     if i <= anos_pag:
         aporte_str = format_currency(prem_curr)
@@ -360,51 +323,32 @@ for i in range(1, st.session_state.simulacao_anos + 1):
 
     data_sim.append({
         "Ano": ano_atual + i, "Idade": idade_cliente + i,
-        "Capital": format_currency(cap_curr), "Aporte": aporte_str,
-        "Total Pago": acum_str, "Multiplicador": mult
+        "Capital Segurado": format_currency(cap_curr), # NOME DA COLUNA ALTERADO
+        "Aporte": aporte_str, "Total Pago": acum_str, "Multiplicador": mult
     })
     cap_curr *= (1 + (taxa/100))
     prem_curr = prem_next
 
 df_sim = pd.DataFrame(data_sim)
 
-# --- ESTILIZAÇÃO DA TABELA DO APP (VISUAL AZUL E ZEBRA) ---
+# Estilização Tabela App
 def style_dataframe_rows(row):
-    # Lógica Zebra: linhas pares cinza escuro, impares preto
-    if row.name % 2 == 0:
-        bg_color = '#1E1E1E'
-    else:
-        bg_color = '#0E1117' # Cor de fundo do app
-    
-    # Estilo base para a linha
+    if row.name % 2 == 0: bg_color = '#1E1E1E'
+    else: bg_color = '#0E1117'
     row_style = [f'background-color: {bg_color}; color: white; border-bottom: 1px solid #333' for _ in row.index]
-    
-    # Destaque para a coluna Multiplicador
     if 'Multiplicador' in row.index:
         idx = row.index.get_loc('Multiplicador')
         row_style[idx] = f'background-color: {bg_color}; color: {COLOR_ACCENT}; font-weight: bold; border-left: 1px solid #333'
-    
     return row_style
 
-styler = df_sim.style.apply(style_dataframe_rows, axis=1)
-
-# Renderiza a tabela estilizada
-st.dataframe(
-    styler, 
-    use_container_width=True, 
-    hide_index=True,
-    height=500 # Altura fixa para scroll
-)
-
-if st.button("Carregar +10 Anos"): 
-    st.session_state.simulacao_anos += 10
-    st.rerun()
+st.dataframe(df_sim.style.apply(style_dataframe_rows, axis=1), use_container_width=True, hide_index=True, height=500)
+if st.button("Carregar +10 Anos"): st.session_state.simulacao_anos += 10; st.rerun()
 
 # DIAGNÓSTICO E PDF
-st.markdown("### 6. Relatório")
+st.markdown("### 6. Conclusão") # Título alterado no App
 saudacao = f"{nome_cliente} & {nome_conjuge}" if is_casado and nome_conjuge else nome_cliente
 
-texto_diag = f"""
+texto_final_app = f"""
 <div class="client-box">
     <p class="client-text">
         Prezado(a) <b>{saudacao}</b>, o custo sucessório estimado é <span class="highlight">{format_currency(custo_total)}</span>.
@@ -413,7 +357,7 @@ texto_diag = f"""
     </p>
 </div>
 """
-st.markdown(texto_diag, unsafe_allow_html=True)
+st.markdown(texto_final_app, unsafe_allow_html=True)
 
 if st.button("📄 Baixar PDF (Blue Mode)"):
     try:
@@ -425,7 +369,6 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.cell(0, 7, f"Cliente: {nome_cliente} ({ano_atual - ano_nasc_cliente} anos)", 0, 1)
         if is_casado: pdf.cell(0, 7, f"Conjuge: {nome_conjuge} ({ano_atual - ano_nasc_conjuge} anos)", 0, 1)
         pdf.ln(5)
-        
         pdf.dark_metric_box("Patrimonio Total", format_currency(total_patrimonio_bruto)); pdf.ln(30)
         
         pdf.section_title("2. Custos Sucessao")
@@ -435,14 +378,14 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.dark_metric_box("% Patrimonio", f"{pct_total:.2f}%"); pdf.ln(30)
         
         pdf.section_title("3. Solucao (Liquidez)")
-        pdf.cell(0, 7, f"Capital: {format_currency(cob_sugerida)}", 0, 1)
+        pdf.cell(0, 7, f"Capital Segurado: {format_currency(cob_sugerida)}", 0, 1)
         pdf.cell(0, 7, f"Premio: {format_currency(premio)} ({anos_pag} anos)", 0, 1)
         pdf.ln(5)
         
         pdf.set_font('Arial', 'B', 12); pdf.set_text_color(255, 255, 255)
         pdf.cell(0, 10, "Evolucao do Multiplicador", 0, 1)
         
-        headers = ["Ano", "Idade", "Capital", "Aporte", "Total Pago", "Mult (x)"]
+        headers = ["Ano", "Idade", "Capital Segurado", "Aporte", "Total Pago", "Mult (x)"] # COLUNA RENOMEADA
         pdf.create_table_row(headers, header=True)
         
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
@@ -457,6 +400,13 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
                 p_p = 0
             pdf.create_table_row(row, zebra=zebra)
             c_p *= (1 + taxa/100)
+            
+        # NOVA SEÇÃO: CONCLUSÃO
+        pdf.ln(10)
+        pdf.section_title("4. Conclusao")
+        # Texto limpo sem tags HTML
+        texto_limpo = f"Prezado(a) {saudacao}, o custo sucessorio estimado e {format_currency(custo_total)}. A solucao de liquidez permite quitar esse custo com um desagio financeiro significativo. Observe na tabela acima o Multiplicador, que indica quantas vezes o beneficio supera o custo."
+        pdf.add_conclusion_text(texto_limpo)
             
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             pdf.output(tmp.name)
