@@ -34,10 +34,13 @@ st.markdown(f"""
     .client-text {{ color: {COLOR_TEXT_STD}; font-size: 1.1rem; line-height: 1.6; }}
     .highlight {{ color: {COLOR_RED}; font-weight: bold; }}
     .highlight-blue {{ color: {COLOR_ACCENT}; font-weight: bold; }}
-    [data-testid="stDataFrame"] thead th {{
-        background-color: {COLOR_HEADER_BG} !important; color: white !important;
-        border-bottom: 2px solid {COLOR_ACCENT} !important;
+    
+    /* Tentativa de forçar estilo no cabeçalho via CSS global */
+    thead tr th {{
+        background-color: {COLOR_HEADER_BG} !important;
+        color: white !important;
     }}
+    
     input {{ text-align: right; }}
     .stButton button {{ width: 100%; border-radius: 5px; }}
     div[data-testid="stDataFrame"] {{ width: 100%; }}
@@ -59,8 +62,7 @@ def get_color_by_tax(tax):
     elif tax > 10: return '#FFD700' 
     else: return '#00D4FF' 
 
-# --- CORREÇÃO DO ERRO: INICIALIZAÇÃO DE ESTADO ---
-# Definimos os valores padrão AQUI, antes de criar os widgets.
+# --- INICIALIZAÇÃO DE ESTADO ---
 defaults = {
     "nome_cliente": "", "is_casado": False, "nome_conjuge": "",
     "ano_nasc_cliente": 1975, "ano_nasc_conjuge": 1978, "regime_casamento": "Separação Total de Bens",
@@ -76,10 +78,8 @@ for key, default_val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default_val
 
-# Lista de chaves para salvar no JSON
 keys_to_save = list(defaults.keys())
 
-# --- Gerenciamento de Arquivo ---
 def carregar_dados(uploaded_file):
     if uploaded_file is not None:
         try:
@@ -87,18 +87,16 @@ def carregar_dados(uploaded_file):
             for key, value in data.items():
                 if key in st.session_state:
                     st.session_state[key] = value
-            st.success("Dados carregados! O app será atualizado.")
+            st.success("Dados carregados!")
             st.rerun()
-        except Exception as e:
-            st.error(f"Erro ao carregar: {e}")
+        except Exception as e: st.error(f"Erro: {e}")
 
 def limpar_dados():
     for key in keys_to_save:
-        if key in st.session_state:
-            del st.session_state[key]
+        if key in st.session_state: del st.session_state[key]
     st.rerun()
 
-# --- Classe PDF ---
+# --- Classe PDF Otimizada ---
 class PDFReport(FPDF):
     def header(self):
         self.set_fill_color(14, 17, 23) 
@@ -146,31 +144,46 @@ class PDFReport(FPDF):
             self.cell(w[i], 8, str(datum), 1, 0, 'C', True)
         self.ln()
     
-    def add_conclusion_text(self, text):
-        self.set_font('Arial', '', 11); self.set_text_color(220, 220, 220)
-        self.multi_cell(0, 7, text)
+    # Nova função para escrever colorido
+    def write_colored_conclusion(self, saudacao, custo, multiplicador_txt):
+        self.set_font('Arial', '', 11)
+        self.set_text_color(220, 220, 220)
+        self.write(5, f"Prezado(a) {saudacao}, o custo sucessorio estimado e ")
+        
+        # Vermelho para o Custo
+        self.set_font('Arial', 'B', 11)
+        self.set_text_color(255, 75, 75) 
+        self.write(5, custo)
+        
+        # Volta normal
+        self.set_font('Arial', '', 11)
+        self.set_text_color(220, 220, 220)
+        self.write(5, ". A solucao de liquidez permite quitar esse custo com um desagio financeiro significativo. Observe na tabela acima o ")
+        
+        # Azul para o Multiplicador
+        self.set_font('Arial', 'B', 11)
+        self.set_text_color(0, 212, 255)
+        self.write(5, "Multiplicador")
+        
+        # Volta normal
+        self.set_font('Arial', '', 11)
+        self.set_text_color(220, 220, 220)
+        self.write(5, ", que indica quantas vezes o beneficio supera o custo.")
+        self.ln(10)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("📂 Menu")
-    # Pega valores atuais do session state para salvar
     current_data = {key: st.session_state[key] for key in keys_to_save if key in st.session_state}
     json_str = json.dumps(current_data)
     st.download_button("💾 Salvar Preenchimento", json_str, "planejamento.json", "application/json")
-    
     uploaded_file = st.file_uploader("📂 Carregar", type=["json"])
-    if uploaded_file and st.button("Confirmar Carregamento"):
-        carregar_dados(uploaded_file)
-            
+    if uploaded_file and st.button("Confirmar Carregamento"): carregar_dados(uploaded_file)
     st.divider()
-    if st.button("🗑️ Limpar Tudo", type="primary"):
-        limpar_dados()
+    if st.button("🗑️ Limpar Tudo", type="primary"): limpar_dados()
 
-# --- APP PRINCIPAL ---
+# --- APP ---
 st.title("Calculadora de Planejamento Patrimonial")
-
-# Nota: Removemos o argumento 'value=...' de todos os widgets abaixo
-# pois o valor agora é controlado 100% pelo st.session_state inicializado acima.
 
 col_d1, col_d2, col_d3 = st.columns([1.5, 0.5, 1.5])
 with col_d1: st.text_input("Nome do Cliente", placeholder="Ex: João", key="nome_cliente")
@@ -184,7 +197,6 @@ idade_cliente = 0; idade_conjuge = 0
 regime_casamento = "Separação Total de Bens"; percentual_meacao = 0.0
 
 with col_n1:
-    # Widgets sem 'value', usando apenas 'key'
     ano_cli = st.number_input("Ano Nasc. (Cliente)", 1920, ano_atual, step=1, key="ano_nasc_cliente")
     idade_cliente = ano_atual - ano_cli
 with col_n3:
@@ -197,12 +209,10 @@ with col_n3:
             reg = st.selectbox("Regime", ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Separação Total de Bens", "Participação Final nos Aquestos"], key="regime_casamento")
             regime_casamento = reg
             if reg in ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Participação Final nos Aquestos"]: percentual_meacao = 0.50
-            else: percentual_meacao = 0.0
 
 st.markdown("---")
 col_pat, col_cus = st.columns([1, 1.2], gap="large")
 
-# SEÇÃO 1: PATRIMÔNIO
 with col_pat:
     st.subheader("1. Levantamento Patrimonial")
     st.caption("Digite os valores totais")
@@ -225,14 +235,12 @@ with col_pat:
     with c_t1: st.metric("Patrimônio Total", format_currency(total_patrimonio_bruto))
     with c_t2: st.metric("Base Tributável", format_currency(base_calculo_imposto), delta="- Meação" if percentual_meacao > 0 else None)
 
-# SEÇÃO 2: CUSTOS
 with col_cus:
     st.subheader("2. Custos de Sucessão")
     c_uf, c_pl = st.columns(2)
     with c_uf: estado_sel = st.selectbox("Estado", ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"], key="estado_selecionado")
     with c_pl: st.write(""); st.write(""); usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
 
-    # Lógica de Atualização Automática
     val_sugerido = 4.0
     if usar_pl: val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
     elif estado_sel == "Minas Gerais (MG)": val_sugerido = 5.0
@@ -271,7 +279,6 @@ with col_cus:
     if usar_pl and (base_calculo_imposto * (aliq_itcmd/100)) > (base_calculo_imposto * 0.04):
         st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency((base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04))}")
 
-# SEÇÃO 3: CENÁRIO GLOBAL
 st.write(""); st.subheader("3. Cenário Global")
 data_globo = [{"pais": "Japão", "tax": 55}, {"pais": "Coreia do Sul", "tax": 50}, {"pais": "França", "tax": 45}, {"pais": "EUA", "tax": 40}, {"pais": "Reino Unido", "tax": 40}, {"pais": "Brasil (Você)", "tax": aliq_itcmd}, {"pais": "Chile", "tax": 25}, {"pais": "Argentina", "tax": 5}]
 df_globo = pd.DataFrame(data_globo).sort_values('tax')
@@ -281,27 +288,24 @@ fig.update_traces(marker_color=df_globo['color'], texttemplate='%{text:.1f}%')
 fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white', height=350)
 st.plotly_chart(fig, use_container_width=True)
 
-# SEÇÃO 5: SOLUÇÃO
 st.markdown("---")
 st.subheader("🛠️ Solução: Liquidez e Multiplicador")
 c_s1, c_s2, c_s3 = st.columns(3)
-# Atenção: Se custo_total mudou, precisamos atualizar cobertura_sugerida se o usuário não tiver editado
-# Mas para não complicar a lógica, deixamos o usuário ajustar ou resetar.
 with c_s1: cob_sugerida = st.number_input("Capital Segurado", 0.0, step=50000.0, format="%.2f", key="cobertura_sugerida")
 with c_s2: anos_pag = st.slider("Anos Pagamento", 1, 30, key="anos_pagamento")
 with c_s3: 
     premio = st.number_input("Prêmio Anual", 0.0, step=1000.0, format="%.2f", key="premio_anual")
     taxa = st.number_input("Reajuste (%)", 0.0, step=0.5, format="%.1f", key="taxa_reajuste")
 
-# Se premio vier zerado do default, sugerimos valor
-if premio == 0.0 and cob_sugerida > 0:
-    premio = cob_sugerida * 0.04
-    # Não podemos atualizar widget renderizado sem rerun, mas o calculo abaixo usa a variavel premio
+if premio == 0.0 and cob_sugerida > 0: premio = cob_sugerida * 0.04
 
 st.write("### 📈 Evolução")
 data_sim = []
 cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
-for i in range(1, st.session_state.simulacao_anos + 1):
+# Usando o simulacao_anos do estado para manter consistência
+anos_para_simular = st.session_state.simulacao_anos 
+
+for i in range(1, anos_para_simular + 1):
     if i <= anos_pag:
         aporte_str = format_currency(prem_curr)
         acum += prem_curr
@@ -322,6 +326,12 @@ for i in range(1, st.session_state.simulacao_anos + 1):
 
 df_sim = pd.DataFrame(data_sim)
 
+# Estilização Tabela App com Estilo Pandas
+# Note: Aplicando cores via 'set_table_styles' para TENTAR forçar o header azul
+styler = df_sim.style.set_table_styles([
+    {'selector': 'th', 'props': [('background-color', COLOR_HEADER_BG), ('color', 'white'), ('border-bottom', f'2px solid {COLOR_ACCENT}')]}
+])
+
 def style_dataframe_rows(row):
     if row.name % 2 == 0: bg_color = '#1E1E1E'
     else: bg_color = '#0E1117'
@@ -331,10 +341,11 @@ def style_dataframe_rows(row):
         row_style[idx] = f'background-color: {bg_color}; color: {COLOR_ACCENT}; font-weight: bold; border-left: 1px solid #333'
     return row_style
 
-st.dataframe(df_sim.style.apply(style_dataframe_rows, axis=1), use_container_width=True, hide_index=True, height=500)
+styler = styler.apply(style_dataframe_rows, axis=1)
+st.dataframe(styler, use_container_width=True, hide_index=True, height=500)
+
 if st.button("Carregar +10 Anos"): st.session_state.simulacao_anos += 10; st.rerun()
 
-# DIAGNÓSTICO
 st.markdown("### 6. Conclusão")
 saudacao = f"{st.session_state.nome_cliente} & {st.session_state.nome_conjuge}" if st.session_state.is_casado and st.session_state.nome_conjuge else st.session_state.nome_cliente
 
@@ -378,8 +389,16 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         headers = ["Ano", "Idade", "Capital Segurado", "Aporte", "Total Pago", "Mult (x)"]
         pdf.create_table_row(headers, header=True)
         
+        # --- PDF DINÂMICO ---
+        # Usa a variável 'anos_para_simular' que vem do session_state (+10 anos)
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
-        for i in range(1, 16):
+        
+        for i in range(1, anos_para_simular + 1):
+            # Verifica quebra de página se a tabela for longa
+            if pdf.get_y() > 270: 
+                pdf.add_page()
+                pdf.create_table_row(headers, header=True)
+
             zebra = (i % 2 == 0)
             if i <= anos_pag:
                 row = [ano_atual+i, idade_cliente+i, f"R$ {c_p:,.0f}", f"R$ {p_p:,.0f}", f"R$ {a_p+p_p:,.0f}", f"{(c_p/(a_p+p_p)):.1f}x"]
@@ -393,8 +412,8 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
             
         pdf.ln(10)
         pdf.section_title("4. Conclusao")
-        texto_limpo = f"Prezado(a) {saudacao}, o custo sucessorio estimado e {format_currency(custo_total)}. A solucao de liquidez permite quitar esse custo com um desagio financeiro significativo. Observe na tabela acima o Multiplicador, que indica quantas vezes o beneficio supera o custo."
-        pdf.add_conclusion_text(texto_limpo)
+        # Usando a nova função colorida
+        pdf.write_colored_conclusion(saudacao, format_currency(custo_total), "Multiplicador")
             
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             pdf.output(tmp.name)
