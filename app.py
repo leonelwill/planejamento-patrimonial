@@ -6,7 +6,7 @@ from datetime import datetime
 from fpdf import FPDF
 import json
 import io
-import tempfile # ADICIONADO PARA CORRIGIR O ERRO
+import tempfile 
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -15,45 +15,52 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# --- DEFINIÇÃO DE CORES (PALETA BLUE TECH) ---
+COLOR_ACCENT = "#00D4FF"      # Azul Ciano Vibrante (Texto Destaque)
+COLOR_ACCENT_DIM = "#0088AA"  # Azul mais escuro (Bordas sutis)
+COLOR_BG_HEADER = "#002B36"   # Azul Petróleo Escuro (Fundo Cabeçalhos)
+COLOR_TEXT_STD = "#E0E0E0"    # Branco Gelo
+COLOR_RED = "#FF4B4B"         # Vermelho Alerta
+
 # --- CSS Personalizado ---
-st.markdown("""
+st.markdown(f"""
     <style>
     /* Estilo Geral Dark */
-    .stApp {
+    .stApp {{
         background-color: #0E1117;
-    }
-    h1 { text-align: center; color: #FFFFFF !important; padding-bottom: 20px; }
-    h2, h3, h4 { color: #FFFFFF !important; }
+    }}
+    h1 {{ text-align: center; color: #FFFFFF !important; padding-bottom: 20px; }}
+    h2, h3, h4 {{ color: #FFFFFF !important; }}
     
     /* Box do Cliente */
-    .client-box {
-        background-color: #1E1E1E;
+    .client-box {{
+        background-color: #161B22;
         padding: 25px;
         border-radius: 10px;
-        border-left: 5px solid #FFD700;
+        border-left: 5px solid {COLOR_ACCENT};
         margin-top: 20px;
-    }
-    .warning-box {
-        background-color: #332a00;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #FFD700;
-        margin-bottom: 15px;
-    }
-    .solution-box {
-        background-color: #0e2a18;
+    }}
+    .client-text {{ color: {COLOR_TEXT_STD}; font-size: 1.1rem; line-height: 1.6; }}
+    
+    /* Destaques de Texto */
+    .highlight {{ color: {COLOR_RED}; font-weight: bold; }}
+    .highlight-blue {{ color: {COLOR_ACCENT}; font-weight: bold; }}
+
+    /* Box Solução (Estilo Azul) */
+    .solution-box {{
+        background-color: #0d1f26; /* Fundo azulado muito escuro */
         padding: 20px;
         border-radius: 10px;
-        border: 1px solid #00FF7F;
+        border: 1px solid {COLOR_ACCENT};
         margin-top: 10px;
-    }
-    
-    /* Botões */
-    .stButton button { width: 100%; }
+    }}
     
     /* Tabelas e Inputs */
-    div[data-testid="stDataFrame"] { width: 100%; }
-    input { text-align: right; }
+    div[data-testid="stDataFrame"] {{ width: 100%; }}
+    input {{ text-align: right; }}
+    
+    /* Ajuste de Botões */
+    .stButton button {{ width: 100%; border-radius: 5px; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,10 +74,11 @@ def obter_aliquota_pl_sp_fixa(valor_base):
     elif valor_base <= 9900800.00: return 6.0
     else: return 8.0
 
+# Cores para o Mapa (Mantivemos o semáforo pois é padrão universal de risco)
 def get_color_by_tax(tax):
-    if tax > 30: return '#FF4B4B'
-    elif tax > 10: return '#FFD700'
-    else: return '#00FF7F'
+    if tax > 30: return '#FF4B4B' # Vermelho
+    elif tax > 10: return '#FFD700' # Amarelo
+    else: return '#00D4FF' # Azul (Seguro/Baixo) em vez de verde, para combinar
 
 # --- Gerenciamento de Estado (Salvar/Carregar) ---
 keys_to_save = [
@@ -100,7 +108,7 @@ def limpar_dados():
             del st.session_state[key]
     st.rerun()
 
-# --- Classe PDF Avançada (Estilo Dark + Tabela Colorida) ---
+# --- Classe PDF Avançada (Blue Theme) ---
 class PDFReport(FPDF):
     def header(self):
         # Fundo Preto da Página
@@ -115,19 +123,20 @@ class PDFReport(FPDF):
 
     def section_title(self, title):
         self.set_font('Arial', 'B', 14)
-        self.set_text_color(0, 255, 127) # Verde Neon
+        # Cor Azul Ciano (RGB: 0, 212, 255)
+        self.set_text_color(0, 212, 255) 
         self.cell(0, 10, title, 0, 1, 'L')
-        self.set_draw_color(0, 255, 127)
+        self.set_draw_color(0, 212, 255)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(5)
 
-    def dark_metric_box(self, label, value, color_r=30, color_g=30, color_b=30, border=False):
+    def dark_metric_box(self, label, value, color_r=25, color_g=35, color_b=45, border=False):
         self.set_fill_color(color_r, color_g, color_b)
         if border:
             self.set_draw_color(255, 75, 75)
             self.set_line_width(0.5)
         else:
-            self.set_draw_color(50, 50, 50)
+            self.set_draw_color(60, 60, 60)
         
         x = self.get_x()
         y = self.get_y()
@@ -144,35 +153,32 @@ class PDFReport(FPDF):
         self.set_xy(x + 95, y) 
 
     def create_table_row(self, data, header=False, zebra=False):
-        # Configuração de Cores da Tabela
         if header:
-            self.set_fill_color(0, 100, 50) # Verde Escuro para o Cabeçalho
+            self.set_fill_color(0, 60, 80) # Azul Petróleo header
             self.set_text_color(255, 255, 255)
             self.set_font('Arial', 'B', 9)
-            self.set_draw_color(0, 255, 127) # Linha verde neon
+            self.set_draw_color(0, 212, 255)
         else:
-            # Efeito Zebra (Alternar cinza escuro e cinza médio)
+            # Zebra: Preto vs Cinza Azulado Escuro
             if zebra:
-                self.set_fill_color(40, 44, 52) 
+                self.set_fill_color(22, 27, 34) 
             else:
-                self.set_fill_color(30, 33, 39)
+                self.set_fill_color(14, 17, 23)
             
-            self.set_text_color(220, 220, 220) # Texto padrão cinza claro
+            self.set_text_color(220, 220, 220)
             self.set_font('Arial', '', 9)
-            self.set_draw_color(60, 60, 60) # Bordas sutis
+            self.set_draw_color(40, 40, 40)
 
-        # Larguras das colunas
         w = [20, 20, 40, 40, 40, 30] 
         
-        # Desenhar Células
         for i, datum in enumerate(data):
-            # Lógica Especial para a coluna "Multiplicador" (Índice 5)
+            # Coluna Multiplicador (Indice 5) em Azul
             if not header and i == 5:
-                self.set_text_color(0, 255, 127) # Verde Neon
-                self.set_font('Arial', 'B', 9)   # Negrito
+                self.set_text_color(0, 212, 255)
+                self.set_font('Arial', 'B', 9)
             elif not header:
-                self.set_text_color(220, 220, 220) # Reset cor normal
-                self.set_font('Arial', '', 9)      # Reset fonte normal
+                self.set_text_color(220, 220, 220)
+                self.set_font('Arial', '', 9)
             
             self.cell(w[i], 8, str(datum), 1, 0, 'C', True)
         self.ln()
@@ -198,8 +204,7 @@ st.title("Calculadora de Planejamento Patrimonial")
 col_d1, col_d2, col_d3 = st.columns([1.5, 0.5, 1.5])
 with col_d1: nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: João", key="nome_cliente")
 with col_d2: 
-    st.write("")
-    st.write("")
+    st.write(""); st.write("")
     is_casado = st.toggle("Casado(a)?", key="is_casado")
 with col_d3:
     if is_casado: nome_conjuge = st.text_input("Nome do Cônjuge", placeholder="Ex: Maria", key="nome_conjuge")
@@ -347,7 +352,8 @@ for i in range(1, st.session_state.simulacao_anos + 1):
         aporte_str = format_currency(prem_curr)
         acum += prem_curr
         acum_str = format_currency(acum)
-        mult = f"{(cap_curr/acum):.1f}x" if acum > 0 else "0x"
+        mult_val = (cap_curr/acum) if acum > 0 else 0
+        mult = f"{mult_val:.1f}x"
         prem_next = prem_curr * (1 + (taxa/100))
     else:
         aporte_str = "-"; acum_str = "-"; mult = "-"; prem_next = 0
@@ -361,8 +367,34 @@ for i in range(1, st.session_state.simulacao_anos + 1):
     prem_curr = prem_next
 
 df_sim = pd.DataFrame(data_sim)
-def style_fn(s): return ['color: #00FF7F; font-weight: bold' if col == 'Multiplicador' else '' for col in s.index]
-st.dataframe(df_sim.style.apply(style_fn, axis=1).set_properties(**{'background-color': '#262730', 'color': 'white'}), use_container_width=True, hide_index=True)
+
+# --- ESTILIZAÇÃO DA TABELA DO APP (VISUAL AZUL E ZEBRA) ---
+def style_dataframe_rows(row):
+    # Lógica Zebra: linhas pares cinza escuro, impares preto
+    if row.name % 2 == 0:
+        bg_color = '#1E1E1E'
+    else:
+        bg_color = '#0E1117' # Cor de fundo do app
+    
+    # Estilo base para a linha
+    row_style = [f'background-color: {bg_color}; color: white; border-bottom: 1px solid #333' for _ in row.index]
+    
+    # Destaque para a coluna Multiplicador
+    if 'Multiplicador' in row.index:
+        idx = row.index.get_loc('Multiplicador')
+        row_style[idx] = f'background-color: {bg_color}; color: {COLOR_ACCENT}; font-weight: bold; border-left: 1px solid #333'
+    
+    return row_style
+
+styler = df_sim.style.apply(style_dataframe_rows, axis=1)
+
+# Renderiza a tabela estilizada
+st.dataframe(
+    styler, 
+    use_container_width=True, 
+    hide_index=True,
+    height=500 # Altura fixa para scroll
+)
 
 if st.button("Carregar +10 Anos"): 
     st.session_state.simulacao_anos += 10
@@ -371,9 +403,19 @@ if st.button("Carregar +10 Anos"):
 # DIAGNÓSTICO E PDF
 st.markdown("### 6. Relatório")
 saudacao = f"{nome_cliente} & {nome_conjuge}" if is_casado and nome_conjuge else nome_cliente
-st.markdown(f"""<div class="client-box"><p class="client-text">Prezado(a) <b>{saudacao}</b>, o custo sucessório estimado é <span class="highlight">{format_currency(custo_total)}</span>. A solução de seguro quita este custo com alto deságio.</p></div>""", unsafe_allow_html=True)
 
-if st.button("📄 Baixar PDF (Dark Mode)"):
+texto_diag = f"""
+<div class="client-box">
+    <p class="client-text">
+        Prezado(a) <b>{saudacao}</b>, o custo sucessório estimado é <span class="highlight">{format_currency(custo_total)}</span>.
+        A solução de liquidez permite quitar esse custo com um deságio financeiro significativo.
+        Observe na tabela acima o <span class="highlight-blue">Multiplicador</span>, que indica quantas vezes o benefício supera o custo.
+    </p>
+</div>
+"""
+st.markdown(texto_diag, unsafe_allow_html=True)
+
+if st.button("📄 Baixar PDF (Blue Mode)"):
     try:
         pdf = PDFReport()
         pdf.add_page()
@@ -403,10 +445,9 @@ if st.button("📄 Baixar PDF (Dark Mode)"):
         headers = ["Ano", "Idade", "Capital", "Aporte", "Total Pago", "Mult (x)"]
         pdf.create_table_row(headers, header=True)
         
-        # Recalcula para PDF (15 linhas)
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
         for i in range(1, 16):
-            zebra = (i % 2 == 0) # Zebra striping
+            zebra = (i % 2 == 0)
             if i <= anos_pag:
                 row = [ano_atual+i, idade_cliente+i, f"R$ {c_p:,.0f}", f"R$ {p_p:,.0f}", f"R$ {a_p+p_p:,.0f}", f"{(c_p/(a_p+p_p)):.1f}x"]
                 a_p += p_p
