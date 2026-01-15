@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+from fpdf import FPDF
+import tempfile
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -55,6 +57,10 @@ st.markdown("""
 def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+def format_brl_num(value):
+    """Formata número float para string BRL sem o R$"""
+    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 def obter_aliquota_pl_sp_fixa(valor_base):
     if valor_base <= 353600.00: return 2.0
     elif valor_base <= 3005600.00: return 4.0
@@ -66,10 +72,37 @@ def get_color_by_tax(tax):
     elif tax > 10: return '#FFD700'
     else: return '#00FF7F'
 
-# --- Título e Dados do Cliente (COM DATAS) ---
+# --- Classe PDF Dark Mode ---
+class PDF(FPDF):
+    def header(self):
+        self.set_fill_color(30, 30, 30) # Fundo Escuro Cabeçalho
+        self.rect(0, 0, 210, 297, 'F') # Preenche a página toda
+        self.set_font('Arial', 'B', 16)
+        self.set_text_color(255, 255, 255) # Branco
+        self.cell(0, 10, 'Planejamento Patrimonial', 0, 1, 'C')
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+    def chapter_title(self, title):
+        self.set_font('Arial', 'B', 12)
+        self.set_text_color(0, 255, 127) # Verde Destaque
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(2)
+
+    def chapter_body(self, body):
+        self.set_font('Arial', '', 10)
+        self.set_text_color(220, 220, 220)
+        self.multi_cell(0, 10, body)
+        self.ln()
+
+# --- Título e Dados do Cliente ---
 st.title("Calculadora de Planejamento Patrimonial")
 
-# Linha 1: Nomes
 col_dados1, col_dados2, col_dados3 = st.columns([1.5, 0.5, 1.5])
 with col_dados1:
     nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: João da Silva")
@@ -81,10 +114,7 @@ with col_dados3:
     if is_casado:
         nome_conjuge = st.text_input("Nome do Cônjuge", placeholder="Ex: Maria da Silva")
 
-# Linha 2: Datas de Nascimento e Regime
 col_nasc1, col_nasc2, col_nasc3 = st.columns([1.5, 0.5, 1.5])
-
-# Inicializa variaveis
 ano_atual = datetime.now().year
 idade_cliente = 0
 idade_conjuge = 0
@@ -92,12 +122,10 @@ regime_casamento = "Separação Total de Bens"
 percentual_meacao = 0.0
 
 with col_nasc1:
-    # Optei por Number Input para o Ano para flexibilidade, mas calculando a idade
     ano_nasc_cliente = st.number_input("Ano de Nascimento (Cliente)", min_value=1920, max_value=ano_atual, value=1975, step=1)
     idade_cliente = ano_atual - ano_nasc_cliente
 
-with col_nasc2:
-    st.write("") # Espaço
+with col_nasc2: st.write("")
 
 with col_nasc3:
     if is_casado:
@@ -108,7 +136,6 @@ with col_nasc3:
         with col_c_reg:
             regime_casamento = st.selectbox("Regime de Bens", 
                 ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Separação Total de Bens", "Participação Final nos Aquestos"])
-            
             if regime_casamento in ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Participação Final nos Aquestos"]:
                 percentual_meacao = 0.50
             else:
@@ -119,9 +146,7 @@ st.markdown("---")
 # --- Colunas Principais ---
 col_patrimonio, col_custos = st.columns([1, 1.2], gap="large")
 
-# ==========================================================
 # SEÇÃO 1: PATRIMÔNIO
-# ==========================================================
 with col_patrimonio:
     st.subheader("1. Levantamento Patrimonial")
     st.caption("Digite os valores totais (Enter para formatar)")
@@ -160,9 +185,7 @@ with col_patrimonio:
         else:
             st.metric(label="Base Tributável", value=format_currency(base_calculo_imposto))
 
-# ==========================================================
 # SEÇÃO 2: CUSTOS DE INVENTÁRIO
-# ==========================================================
 with col_custos:
     st.subheader("2. Custos de Sucessão")
     
@@ -190,7 +213,6 @@ with col_custos:
         st.session_state.aliq_itcmd_input = val_sugerido
         st.session_state.ultimo_estado_pl = usar_pl
 
-    # Tabela de Custos
     st.markdown("#### Detalhamento (Sobre a Base Tributável)")
     
     c_itcmd1, c_itcmd2, c_itcmd3 = st.columns([3, 1.5, 2])
@@ -243,14 +265,11 @@ with col_custos:
         if delta > 0:
             st.error(f"🚨 IMPACTO DA NOVA LEI: + {format_currency(delta)} de Imposto a pagar.")
 
-# ==========================================================
-# SEÇÃO 3: CENÁRIO GLOBAL (ATUALIZADA)
-# ==========================================================
+# SEÇÃO 3: CENÁRIO GLOBAL
 st.write("")
 st.subheader("3. Cenário Global de Sucessão")
 st.caption("Verde: ≤10% | Amarelo: 11-30% | Vermelho: >30%")
 
-# Dados Ampliados
 aliquota_efetiva = aliquota_itcmd
 data_globo = [
     {"pais": "Japão", "lat": 36.204, "lon": 138.252, "tax": 55},
@@ -289,9 +308,7 @@ with col_globo:
         margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor='rgba(0,0,0,0)', height=400, font=dict(color="black"))
     st.plotly_chart(fig_globe, use_container_width=True)
 
-# ==========================================================
 # SEÇÃO 5: SOLUÇÃO (SIMULADOR EVOLUTIVO)
-# ==========================================================
 st.markdown("---")
 st.subheader("🛠️ Solução: Liquidez e Alavancagem Fiscal")
 
@@ -299,31 +316,24 @@ if is_casado and percentual_meacao > 0:
     st.markdown(f"""
     <div class="warning-box">
         <b>⚠️ Atenção ao Casal:</b> Devido ao regime de <b>{regime_casamento}</b>, 
-        a simulação abaixo considera a <b>parte individual</b>. O ideal é duplicar a proteção (uma apólice para {nome_cliente} e outra para {nome_conjuge}).
+        a simulação abaixo considera a <b>parte individual</b>. O ideal é duplicar a proteção.
     </div>
     """, unsafe_allow_html=True)
 
-# Inputs da Solução
 col_sol_1, col_sol_2, col_sol_3 = st.columns([1, 1, 1])
-
 with col_sol_1:
     cobertura_sugerida = st.number_input("Capital Segurado Necessário (Hoje)", value=custo_total, step=50000.0, format="%.2f")
-
 with col_sol_2:
     anos_pagamento = st.slider("Tempo de Pagamento (Anos)", 1, 30, 10)
-    
 with col_sol_3:
     premio_anual = st.number_input("Prêmio Anual Inicial (Investimento)", value=(cobertura_sugerida * 0.04), step=1000.0, format="%.2f")
     taxa_reajuste = st.number_input("Taxa de Reajuste Anual (IPCA/IGP-M %)", value=5.0, step=0.5, format="%.1f")
 
-# --- LÓGICA DA TABELA EVOLUTIVA ---
 st.write("### 📈 Evolução da Alavancagem Patrimonial")
 
-# Estado para controlar quantas linhas mostramos
 if 'simulacao_anos' not in st.session_state:
     st.session_state.simulacao_anos = 16
 
-# Função para gerar os dados
 data_simulacao = []
 capital_atual = cobertura_sugerida
 premio_atual = premio_anual
@@ -334,69 +344,63 @@ for i in range(1, st.session_state.simulacao_anos + 1):
     ano_calendario = ano_atual + i
     idade_simulada = idade_atual + i
     
-    # Lógica de Pagamento: Só paga se estiver dentro do prazo (anos_pagamento)
     if i <= anos_pagamento:
-        aporte_do_ano = premio_atual
-        # Prepara o prêmio do ano seguinte (reajuste)
+        # Período de Pagamento
+        aporte_do_ano_str = format_currency(premio_atual)
+        acumulado += premio_atual
+        acumulado_str = format_currency(acumulado)
+        if acumulado > 0:
+            alavancagem_x = f"{(capital_atual / acumulado):.1f}x"
+        else:
+            alavancagem_x = "0x"
+        
+        # Prepara próximo
         premio_proximo = premio_atual * (1 + (taxa_reajuste/100))
     else:
-        aporte_do_ano = 0.0
-        premio_proximo = 0.0 # Não tem mais prêmio
-    
-    acumulado += aporte_do_ano
-    
-    # Cálculo da Alavancagem (Capital / O que pagou até agora)
-    if acumulado > 0:
-        alavancagem_x = capital_atual / acumulado
-    else:
-        alavancagem_x = 0
-        
+        # Fim do Pagamento
+        aporte_do_ano_str = "-"
+        # A pedido: acumulado também fica "-"
+        acumulado_str = "-"
+        alavancagem_x = "-"
+        premio_proximo = 0.0
+
     data_simulacao.append({
         "Ano": ano_calendario,
         "Idade": idade_simulada,
-        "Capital Segurado (R$)": capital_atual,
-        "Aporte Anual (R$)": aporte_do_ano,
-        "Total Pago Acumulado (R$)": acumulado,
-        "Alavancagem": f"{alavancagem_x:.1f}x"
+        "Capital Segurado": format_currency(capital_atual),
+        "Aporte Anual": aporte_do_ano_str,
+        "Total Pago": acumulado_str,
+        "Alavancagem": alavancagem_x
     })
     
-    # Atualiza variaveis para proxima iteração
     capital_atual = capital_atual * (1 + (taxa_reajuste/100))
     premio_atual = premio_proximo
 
-# Criação do DataFrame
 df_simulacao = pd.DataFrame(data_simulacao)
 
-# Configuração de exibição da Tabela (Streamlit Column Config)
-st.dataframe(
-    df_simulacao,
-    column_config={
-        "Ano": st.column_config.NumberColumn("Ano", format="%d"),
-        "Idade": st.column_config.NumberColumn("Idade", format="%d"),
-        "Capital Segurado (R$)": st.column_config.NumberColumn("Capital Segurado", format="R$ %.2f"),
-        "Aporte Anual (R$)": st.column_config.NumberColumn("Aporte Anual", format="R$ %.2f"),
-        "Total Pago Acumulado (R$)": st.column_config.NumberColumn("Total Pago", format="R$ %.2f"),
-        "Alavancagem": st.column_config.TextColumn("Alavancagem", help="Quantas vezes o capital é maior que o valor pago."),
-    },
-    use_container_width=True,
-    hide_index=True
-)
+# Aplicação de Estilo (Colors) usando Pandas Styler
+# Definimos um estilo dark para a tabela inteira e destaque na coluna Alavancagem
+def highlight_alavancagem(s):
+    return ['color: #00FF7F; font-weight: bold' if col == 'Alavancagem' else '' for col in s.index]
 
-# Botão para carregar mais anos
+styler = df_simulacao.style.apply(highlight_alavancagem, axis=1)
+styler.set_properties(**{
+    'background-color': '#262730',
+    'color': 'white',
+    'border-color': '#444444'
+})
+
+st.dataframe(styler, use_container_width=True, hide_index=True)
+
 if st.button("Carregar +10 Anos"):
     st.session_state.simulacao_anos += 10
     st.rerun()
 
-# ==========================================================
-# SEÇÃO 6: DIAGNÓSTICO
-# ==========================================================
-st.markdown("### 6. Diagnóstico Final")
+# SEÇÃO 6: DIAGNÓSTICO E PDF
+st.markdown("### 6. Diagnóstico Final & Relatório")
 
 saudacao = f"Prezados <b>{nome_cliente}</b> e <b>{nome_conjuge}</b>" if is_casado and nome_conjuge else f"Prezado(a) <b>{nome_cliente}</b>"
 texto_meacao = f"Considerando o regime de <b>{regime_casamento}</b>, calculamos o risco individual de cada cônjuge." if is_casado else "Cálculo realizado sobre a totalidade dos bens."
-
-# Pega a alavancagem do último ano pago para o texto
-alavancagem_final = cobertura_sugerida / (premio_anual * anos_pagamento) if (premio_anual * anos_pagamento) > 0 else 0
 
 texto_diagnostico = f"""
 <div class="client-box">
@@ -408,10 +412,43 @@ texto_diagnostico = f"""
         Identificamos um custo sucessório estimado de <span class="highlight">{format_currency(custo_total)}</span>.
         A solução de liquidez permite quitar esse custo com um deságio financeiro significativo.
     </p>
-    <p class="client-text">
-        Como demonstrado na tabela acima, nos primeiros anos a proteção é quase gratuita (alavancagem altíssima). 
-        Mesmo ao final do plano, você terá pago apenas uma fração do benefício total, garantindo que o patrimônio fique na família e não fique para o governo.
-    </p>
 </div>
 """
 st.markdown(texto_diagnostico, unsafe_allow_html=True)
+
+# --- GERAÇÃO DE PDF ---
+if st.button("📄 Baixar Relatório PDF (Dark Mode)"):
+    try:
+        pdf = PDF()
+        pdf.add_page()
+        
+        # Conteúdo
+        pdf.chapter_title("1. Levantamento Patrimonial")
+        pdf.chapter_body(f"Cliente: {nome_cliente}")
+        if is_casado: pdf.chapter_body(f"Conjugue: {nome_conjuge} ({regime_casamento})")
+        pdf.chapter_body(f"Patrimonio Total: {format_currency(total_patrimonio_bruto)}")
+        
+        pdf.chapter_title("2. Custos de Sucessao")
+        pdf.chapter_body(f"Estado Base: {estado_selecionado}")
+        pdf.chapter_body(f"Custo Total Estimado: {format_currency(custo_total)} ({percentual_total:.2f}%)")
+        if usar_pl: pdf.chapter_body("ATENCAO: Simulacao considerando PL n.7/2024 (SP)")
+        
+        pdf.chapter_title("3. Solucao de Liquidez")
+        pdf.chapter_body(f"Capital Segurado: {format_currency(cobertura_sugerida)}")
+        pdf.chapter_body(f"Premio Inicial: {format_currency(premio_anual)}")
+        pdf.chapter_body(f"Tempo Pagamento: {anos_pagamento} anos")
+        
+        # Salva em arquivo temporário
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            pdf.output(tmp_file.name)
+            with open(tmp_file.name, "rb") as f:
+                pdf_data = f.read()
+        
+        st.download_button(
+            label="⬇️ Download PDF Agora",
+            data=pdf_data,
+            file_name=f"Relatorio_Planejamento_{nome_cliente.split()[0] if nome_cliente else 'Cliente'}.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"Erro ao gerar PDF: {e}. Verifique se a biblioteca fpdf esta instalada.")
