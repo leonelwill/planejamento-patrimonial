@@ -5,7 +5,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 from fpdf import FPDF
 import json
-import io
 import tempfile 
 
 # --- Configuração da Página ---
@@ -35,10 +34,11 @@ st.markdown(f"""
     .highlight {{ color: {COLOR_RED}; font-weight: bold; }}
     .highlight-blue {{ color: {COLOR_ACCENT}; font-weight: bold; }}
     
-    /* Tentativa de forçar estilo no cabeçalho via CSS global */
-    thead tr th {{
+    /* Cabeçalho da Tabela Azul */
+    [data-testid="stDataFrame"] thead th {{
         background-color: {COLOR_HEADER_BG} !important;
         color: white !important;
+        border-bottom: 2px solid {COLOR_ACCENT} !important;
     }}
     
     input {{ text-align: right; }}
@@ -96,20 +96,28 @@ def limpar_dados():
         if key in st.session_state: del st.session_state[key]
     st.rerun()
 
-# --- Classe PDF Otimizada ---
+# --- Classe PDF Otimizada (Com Acentos) ---
 class PDFReport(FPDF):
     def header(self):
         self.set_fill_color(14, 17, 23) 
         self.rect(0, 0, 297, 420, 'F') 
         self.set_font('Arial', 'B', 20)
         self.set_text_color(255, 255, 255)
-        self.cell(0, 15, 'Relatório de Planejamento Patrimonial', 0, 1, 'C')
+        # Título sem acento no código fonte, tratado depois se necessário, mas aqui é fixo
+        self.cell(0, 15, self.safe_txt('Relatório de Planejamento Patrimonial'), 0, 1, 'C')
         self.ln(5)
+
+    def safe_txt(self, text):
+        """Converte string unicode para latin-1 suportado pelo FPDF padrão"""
+        try:
+            return text.encode('latin-1', 'replace').decode('latin-1')
+        except:
+            return text
 
     def section_title(self, title):
         self.set_font('Arial', 'B', 14)
         self.set_text_color(0, 212, 255) 
-        self.cell(0, 10, title, 0, 1, 'L')
+        self.cell(0, 10, self.safe_txt(title), 0, 1, 'L')
         self.set_draw_color(0, 212, 255)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(5)
@@ -124,9 +132,9 @@ class PDFReport(FPDF):
         self.rect(x, y, 90, 25, 'FD')
         self.set_xy(x+5, y+5)
         self.set_font('Arial', '', 10); self.set_text_color(200, 200, 200)
-        self.cell(80, 5, label, 0, 2)
+        self.cell(80, 5, self.safe_txt(label), 0, 2)
         self.set_font('Arial', 'B', 14); self.set_text_color(255, 255, 255)
-        self.cell(80, 8, value, 0, 0)
+        self.cell(80, 8, self.safe_txt(value), 0, 0)
         self.set_xy(x + 95, y) 
 
     def create_table_row(self, data, header=False, zebra=False):
@@ -141,35 +149,44 @@ class PDFReport(FPDF):
         for i, datum in enumerate(data):
             if not header and i == 5: self.set_text_color(0, 212, 255); self.set_font('Arial', 'B', 9)
             elif not header: self.set_text_color(220, 220, 220); self.set_font('Arial', '', 9)
-            self.cell(w[i], 8, str(datum), 1, 0, 'C', True)
+            self.cell(w[i], 8, self.safe_txt(str(datum)), 1, 0, 'C', True)
         self.ln()
     
-    # Nova função para escrever colorido
     def write_colored_conclusion(self, saudacao, custo, multiplicador_txt):
         self.set_font('Arial', '', 11)
         self.set_text_color(220, 220, 220)
-        self.write(5, f"Prezado(a) {saudacao}, o custo sucessorio estimado e ")
+        self.write(5, self.safe_txt(f"Prezado(a) {saudacao}, o custo sucessório estimado é "))
         
-        # Vermelho para o Custo
         self.set_font('Arial', 'B', 11)
         self.set_text_color(255, 75, 75) 
-        self.write(5, custo)
+        self.write(5, self.safe_txt(custo))
         
-        # Volta normal
         self.set_font('Arial', '', 11)
         self.set_text_color(220, 220, 220)
-        self.write(5, ". A solucao de liquidez permite quitar esse custo com um desagio financeiro significativo. Observe na tabela acima o ")
+        self.write(5, self.safe_txt(". A solução de liquidez permite quitar esse custo com um deságio financeiro significativo. Observe na tabela acima o "))
         
-        # Azul para o Multiplicador
         self.set_font('Arial', 'B', 11)
         self.set_text_color(0, 212, 255)
-        self.write(5, "Multiplicador")
+        self.write(5, self.safe_txt("Multiplicador"))
         
-        # Volta normal
         self.set_font('Arial', '', 11)
         self.set_text_color(220, 220, 220)
-        self.write(5, ", que indica quantas vezes o beneficio supera o custo.")
+        self.write(5, self.safe_txt(", que indica quantas vezes o benefício supera o custo."))
         self.ln(10)
+
+    def write_warning_box(self, text):
+        self.ln(5)
+        self.set_fill_color(60, 10, 10) # Fundo Vermelho Escuro
+        self.set_draw_color(255, 75, 75) # Borda Vermelha Clara
+        self.set_text_color(255, 200, 200) # Texto Claro
+        self.set_font('Arial', 'B', 10)
+        
+        # Salva posição Y
+        y_start = self.get_y()
+        self.rect(10, y_start, 190, 10, 'FD')
+        self.set_xy(12, y_start + 2)
+        self.cell(0, 6, self.safe_txt(text), 0, 1, 'L')
+        self.ln(2)
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -276,17 +293,32 @@ with col_cus:
             <p style="color: #ddd; margin:0;">Comprometimento: <b>{pct_total:.2f}%</b></p>
         </div>
     """, unsafe_allow_html=True)
+    
+    aumento_imposto = 0
     if usar_pl and (base_calculo_imposto * (aliq_itcmd/100)) > (base_calculo_imposto * 0.04):
-        st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency((base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04))}")
+        aumento_imposto = (base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04)
+        st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency(aumento_imposto)}")
 
 st.write(""); st.subheader("3. Cenário Global")
-data_globo = [{"pais": "Japão", "tax": 55}, {"pais": "Coreia do Sul", "tax": 50}, {"pais": "França", "tax": 45}, {"pais": "EUA", "tax": 40}, {"pais": "Reino Unido", "tax": 40}, {"pais": "Brasil (Você)", "tax": aliq_itcmd}, {"pais": "Chile", "tax": 25}, {"pais": "Argentina", "tax": 5}]
+data_globo = [{"pais": "Japão", "lat": 36.204, "lon": 138.252, "tax": 55}, {"pais": "Coreia do Sul", "lat": 35.907, "lon": 127.766, "tax": 50}, {"pais": "França", "lat": 46.227, "lon": 2.213, "tax": 45}, {"pais": "EUA", "lat": 37.090, "lon": -95.712, "tax": 40}, {"pais": "Reino Unido", "lat": 55.378, "lon": -3.436, "tax": 40}, {"pais": "Brasil (Você)", "lat": -14.235, "lon": -51.925, "tax": aliq_itcmd}, {"pais": "Chile", "lat": -35.675, "lon": -71.543, "tax": 25}, {"pais": "Argentina", "lat": -38.416, "lon": -63.616, "tax": 5}]
 df_globo = pd.DataFrame(data_globo).sort_values('tax')
 df_globo['color'] = df_globo['tax'].apply(get_color_by_tax)
-fig = px.bar(df_globo, x='tax', y='pais', orientation='h', text='tax', title="Ranking Alíquotas Máximas")
-fig.update_traces(marker_color=df_globo['color'], texttemplate='%{text:.1f}%')
-fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white', height=350)
-st.plotly_chart(fig, use_container_width=True)
+df_globo['size'] = df_globo['pais'].apply(lambda x: 25 if "Você" in x else 12)
+
+c_chart, c_globe = st.columns(2)
+with c_chart:
+    fig = px.bar(df_globo, x='tax', y='pais', orientation='h', text='tax', title="Ranking Alíquotas Máximas")
+    fig.update_traces(marker_color=df_globo['color'], texttemplate='%{text:.1f}%')
+    fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='white', height=350)
+    st.plotly_chart(fig, use_container_width=True)
+with c_globe:
+    fig_globe = go.Figure(data=go.Scattergeo(
+        lon = df_globo['lon'], lat = df_globo['lat'], text = df_globo['pais'] + ": " + df_globo['tax'].astype(str) + "%",
+        mode = 'markers', marker = dict(size = df_globo['size'], color = df_globo['color'], line = dict(width=1, color='white'), opacity = 0.9)
+    ))
+    fig_globe.update_layout(geo = dict(projection_type = "orthographic", showland = True, landcolor = "#f3f4f6", showocean = True, oceancolor = "#a4d4f2", showcountries = True, countrycolor = "#888888", projection_rotation = dict(lon=-50, lat=-15, roll=0)),
+        margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor='rgba(0,0,0,0)', height=350, font=dict(color="black"))
+    st.plotly_chart(fig_globe, use_container_width=True)
 
 st.markdown("---")
 st.subheader("🛠️ Solução: Liquidez e Multiplicador")
@@ -302,7 +334,6 @@ if premio == 0.0 and cob_sugerida > 0: premio = cob_sugerida * 0.04
 st.write("### 📈 Evolução")
 data_sim = []
 cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
-# Usando o simulacao_anos do estado para manter consistência
 anos_para_simular = st.session_state.simulacao_anos 
 
 for i in range(1, anos_para_simular + 1):
@@ -326,12 +357,10 @@ for i in range(1, anos_para_simular + 1):
 
 df_sim = pd.DataFrame(data_sim)
 
-# Estilização Tabela App com Estilo Pandas
-# Note: Aplicando cores via 'set_table_styles' para TENTAR forçar o header azul
+# Estilo Tabela
 styler = df_sim.style.set_table_styles([
     {'selector': 'th', 'props': [('background-color', COLOR_HEADER_BG), ('color', 'white'), ('border-bottom', f'2px solid {COLOR_ACCENT}')]}
 ])
-
 def style_dataframe_rows(row):
     if row.name % 2 == 0: bg_color = '#1E1E1E'
     else: bg_color = '#0E1117'
@@ -340,7 +369,6 @@ def style_dataframe_rows(row):
         idx = row.index.get_loc('Multiplicador')
         row_style[idx] = f'background-color: {bg_color}; color: {COLOR_ACCENT}; font-weight: bold; border-left: 1px solid #333'
     return row_style
-
 styler = styler.apply(style_dataframe_rows, axis=1)
 st.dataframe(styler, use_container_width=True, hide_index=True, height=500)
 
@@ -365,36 +393,36 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf = PDFReport()
         pdf.add_page()
         
-        pdf.section_title("1. Cliente e Patrimonio")
+        pdf.section_title("1. Cliente e Patrimônio")
         pdf.set_font('Arial', '', 11); pdf.set_text_color(220, 220, 220)
-        pdf.cell(0, 7, f"Cliente: {st.session_state.nome_cliente} ({ano_atual - st.session_state.ano_nasc_cliente} anos)", 0, 1)
-        if st.session_state.is_casado: pdf.cell(0, 7, f"Conjuge: {st.session_state.nome_conjuge} ({ano_atual - st.session_state.ano_nasc_conjuge} anos)", 0, 1)
+        pdf.cell(0, 7, pdf.safe_txt(f"Cliente: {st.session_state.nome_cliente} ({ano_atual - st.session_state.ano_nasc_cliente} anos)"), 0, 1)
+        if st.session_state.is_casado: pdf.cell(0, 7, pdf.safe_txt(f"Cônjuge: {st.session_state.nome_conjuge} ({ano_atual - st.session_state.ano_nasc_conjuge} anos)"), 0, 1)
         pdf.ln(5)
-        pdf.dark_metric_box("Patrimonio Total", format_currency(total_patrimonio_bruto)); pdf.ln(30)
+        pdf.dark_metric_box("Patrimônio Total", format_currency(total_patrimonio_bruto)); pdf.ln(30)
         
-        pdf.section_title("2. Custos Sucessao")
-        pdf.cell(0, 7, f"Estado: {st.session_state.estado_selecionado}", 0, 1)
+        pdf.section_title("2. Custos de Sucessão")
+        pdf.cell(0, 7, pdf.safe_txt(f"Estado: {st.session_state.estado_selecionado}"), 0, 1)
         pdf.ln(5)
-        pdf.dark_metric_box("Custo Inventario", format_currency(custo_total), 60, 20, 20, True)
-        pdf.dark_metric_box("% Patrimonio", f"{pct_total:.2f}%"); pdf.ln(30)
+        pdf.dark_metric_box("Custo Inventário", format_currency(custo_total), 60, 20, 20, True)
+        pdf.dark_metric_box("% Patrimônio", f"{pct_total:.2f}%"); pdf.ln(30)
         
-        pdf.section_title("3. Solucao (Liquidez)")
-        pdf.cell(0, 7, f"Capital Segurado: {format_currency(cob_sugerida)}", 0, 1)
-        pdf.cell(0, 7, f"Premio: {format_currency(premio)} ({anos_pag} anos)", 0, 1)
+        # AVISO PL NO PDF (NOVIDADE)
+        if aumento_imposto > 0:
+            pdf.write_warning_box(f"ATENÇÃO: A PL n.7/2024 elevaria o imposto em + {format_currency(aumento_imposto)}")
+        
+        pdf.section_title("3. Solução (Liquidez)")
+        pdf.cell(0, 7, pdf.safe_txt(f"Capital Segurado: {format_currency(cob_sugerida)}"), 0, 1)
+        pdf.cell(0, 7, pdf.safe_txt(f"Prêmio: {format_currency(premio)} ({anos_pag} anos)"), 0, 1)
         pdf.ln(5)
         
         pdf.set_font('Arial', 'B', 12); pdf.set_text_color(255, 255, 255)
-        pdf.cell(0, 10, "Evolucao do Multiplicador", 0, 1)
+        pdf.cell(0, 10, pdf.safe_txt("Evolução do Multiplicador"), 0, 1)
         
         headers = ["Ano", "Idade", "Capital Segurado", "Aporte", "Total Pago", "Mult (x)"]
         pdf.create_table_row(headers, header=True)
         
-        # --- PDF DINÂMICO ---
-        # Usa a variável 'anos_para_simular' que vem do session_state (+10 anos)
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
-        
         for i in range(1, anos_para_simular + 1):
-            # Verifica quebra de página se a tabela for longa
             if pdf.get_y() > 270: 
                 pdf.add_page()
                 pdf.create_table_row(headers, header=True)
@@ -411,8 +439,7 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
             c_p *= (1 + taxa/100)
             
         pdf.ln(10)
-        pdf.section_title("4. Conclusao")
-        # Usando a nova função colorida
+        pdf.section_title("4. Conclusão")
         pdf.write_colored_conclusion(saudacao, format_currency(custo_total), "Multiplicador")
             
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
