@@ -103,12 +103,10 @@ class PDFReport(FPDF):
         self.rect(0, 0, 297, 420, 'F') 
         self.set_font('Arial', 'B', 20)
         self.set_text_color(255, 255, 255)
-        # Título sem acento no código fonte, tratado depois se necessário, mas aqui é fixo
         self.cell(0, 15, self.safe_txt('Relatório de Planejamento Patrimonial'), 0, 1, 'C')
         self.ln(5)
 
     def safe_txt(self, text):
-        """Converte string unicode para latin-1 suportado pelo FPDF padrão"""
         try:
             return text.encode('latin-1', 'replace').decode('latin-1')
         except:
@@ -188,16 +186,21 @@ class PDFReport(FPDF):
         self.cell(0, 6, self.safe_txt(text), 0, 1, 'L')
         self.ln(2)
 
-# --- BARRA LATERAL ---
+# --- BARRA LATERAL (AJUSTE 3: Expander) ---
 with st.sidebar:
     st.header("📂 Menu")
-    current_data = {key: st.session_state[key] for key in keys_to_save if key in st.session_state}
-    json_str = json.dumps(current_data)
-    st.download_button("💾 Salvar Preenchimento", json_str, "planejamento.json", "application/json")
-    uploaded_file = st.file_uploader("📂 Carregar", type=["json"])
-    if uploaded_file and st.button("Confirmar Carregamento"): carregar_dados(uploaded_file)
-    st.divider()
-    if st.button("🗑️ Limpar Tudo", type="primary"): limpar_dados()
+    # Colocamos as opções de salvar/carregar dentro de um expander para esconder/abrir
+    with st.expander("💾 Gerenciar Dados (Salvar/Abrir)", expanded=False):
+        current_data = {key: st.session_state[key] for key in keys_to_save if key in st.session_state}
+        json_str = json.dumps(current_data)
+        st.download_button("⬇️ Baixar Preenchimento", json_str, "planejamento.json", "application/json")
+        
+        st.divider()
+        uploaded_file = st.file_uploader("📂 Carregar Arquivo", type=["json"])
+        if uploaded_file and st.button("Confirmar Carregamento"): carregar_dados(uploaded_file)
+        
+        st.divider()
+        if st.button("🗑️ Limpar Tudo", type="primary"): limpar_dados()
 
 # --- APP ---
 st.title("Calculadora de Planejamento Patrimonial")
@@ -209,7 +212,7 @@ with col_d3:
     if st.session_state.is_casado: st.text_input("Nome do Cônjuge", placeholder="Ex: Maria", key="nome_conjuge")
 
 col_n1, col_n2, col_n3 = st.columns([1.5, 0.5, 1.5])
-ano_atual = datetime.now().year
+ano_atual = datetime.now().year # 2026 conforme contexto
 idade_cliente = 0; idade_conjuge = 0
 regime_casamento = "Separação Total de Bens"; percentual_meacao = 0.0
 
@@ -258,13 +261,21 @@ with col_cus:
     with c_uf: estado_sel = st.selectbox("Estado", ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"], key="estado_selecionado")
     with c_pl: st.write(""); st.write(""); usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
 
+    # --- AJUSTE 1: Lógica do PL n.7 ---
+    # Recalcula a alíquota sugerida com base nos valores ATUAIS
     val_sugerido = 4.0
-    if usar_pl: val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
-    elif estado_sel == "Minas Gerais (MG)": val_sugerido = 5.0
-    
-    if st.session_state.ultimo_estado_pl != usar_pl:
+    if usar_pl: 
+        val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
+        # SE PL ESTIVER LIGADO, FORÇAMOS A ATUALIZAÇÃO DO INPUT PARA ACOMPANHAR O CÁLCULO
+        # Isso garante que se o patrimônio mudar, a alíquota muda junto.
         st.session_state.aliq_itcmd_input = val_sugerido
-        st.session_state.ultimo_estado_pl = usar_pl
+    elif estado_sel == "Minas Gerais (MG)": 
+        val_sugerido = 5.0
+        # Se PL desligado, só atualiza se houve mudança de estado para não atrapalhar edição manual
+        if st.session_state.ultimo_estado_pl != usar_pl:
+             st.session_state.aliq_itcmd_input = val_sugerido
+
+    st.session_state.ultimo_estado_pl = usar_pl
 
     st.markdown("#### Detalhamento")
     c1, c2, c3 = st.columns([3, 1.5, 2])
@@ -295,6 +306,7 @@ with col_cus:
     """, unsafe_allow_html=True)
     
     aumento_imposto = 0
+    # O aviso agora funcionará pois o aliq_itcmd está sendo atualizado corretamente acima
     if usar_pl and (base_calculo_imposto * (aliq_itcmd/100)) > (base_calculo_imposto * 0.04):
         aumento_imposto = (base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04)
         st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency(aumento_imposto)}")
@@ -336,8 +348,9 @@ data_sim = []
 cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
 anos_para_simular = st.session_state.simulacao_anos 
 
-for i in range(1, anos_para_simular + 1):
-    if i <= anos_pag:
+# --- AJUSTE 2: Loop começando em 0 para incluir o ano atual (2026) ---
+for i in range(0, anos_para_simular):
+    if i < anos_pag: # Menor que anos_pagamento (ex: 0 a 9 = 10 pagamentos)
         aporte_str = format_currency(prem_curr)
         acum += prem_curr
         acum_str = format_currency(acum)
@@ -406,7 +419,6 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.dark_metric_box("Custo Inventário", format_currency(custo_total), 60, 20, 20, True)
         pdf.dark_metric_box("% Patrimônio", f"{pct_total:.2f}%"); pdf.ln(30)
         
-        # AVISO PL NO PDF (NOVIDADE)
         if aumento_imposto > 0:
             pdf.write_warning_box(f"ATENÇÃO: A PL n.7/2024 elevaria o imposto em + {format_currency(aumento_imposto)}")
         
@@ -422,13 +434,14 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.create_table_row(headers, header=True)
         
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
-        for i in range(1, anos_para_simular + 1):
+        # Loop PDF também ajustado para range(0, ...)
+        for i in range(0, anos_para_simular):
             if pdf.get_y() > 270: 
                 pdf.add_page()
                 pdf.create_table_row(headers, header=True)
 
             zebra = (i % 2 == 0)
-            if i <= anos_pag:
+            if i < anos_pag:
                 row = [ano_atual+i, idade_cliente+i, f"R$ {c_p:,.0f}", f"R$ {p_p:,.0f}", f"R$ {a_p+p_p:,.0f}", f"{(c_p/(a_p+p_p)):.1f}x"]
                 a_p += p_p
                 p_p *= (1 + taxa/100)
