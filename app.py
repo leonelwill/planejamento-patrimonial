@@ -52,6 +52,7 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def obter_aliquota_pl_sp_fixa(valor_base):
+    # FAIXAS CORRIGIDAS E VERIFICADAS
     if valor_base <= 353600.00: return 2.0
     elif valor_base <= 3005600.00: return 4.0
     elif valor_base <= 9900800.00: return 6.0
@@ -96,7 +97,7 @@ def limpar_dados():
         if key in st.session_state: del st.session_state[key]
     st.rerun()
 
-# --- Classe PDF Otimizada (Com Acentos) ---
+# --- Classe PDF ---
 class PDFReport(FPDF):
     def header(self):
         self.set_fill_color(14, 17, 23) 
@@ -107,10 +108,8 @@ class PDFReport(FPDF):
         self.ln(5)
 
     def safe_txt(self, text):
-        try:
-            return text.encode('latin-1', 'replace').decode('latin-1')
-        except:
-            return text
+        try: return text.encode('latin-1', 'replace').decode('latin-1')
+        except: return text
 
     def section_title(self, title):
         self.set_font('Arial', 'B', 14)
@@ -154,51 +153,36 @@ class PDFReport(FPDF):
         self.set_font('Arial', '', 11)
         self.set_text_color(220, 220, 220)
         self.write(5, self.safe_txt(f"Prezado(a) {saudacao}, o custo sucessório estimado é "))
-        
-        self.set_font('Arial', 'B', 11)
-        self.set_text_color(255, 75, 75) 
+        self.set_font('Arial', 'B', 11); self.set_text_color(255, 75, 75) 
         self.write(5, self.safe_txt(custo))
-        
-        self.set_font('Arial', '', 11)
-        self.set_text_color(220, 220, 220)
+        self.set_font('Arial', '', 11); self.set_text_color(220, 220, 220)
         self.write(5, self.safe_txt(". A solução de liquidez permite quitar esse custo com um deságio financeiro significativo. Observe na tabela acima o "))
-        
-        self.set_font('Arial', 'B', 11)
-        self.set_text_color(0, 212, 255)
+        self.set_font('Arial', 'B', 11); self.set_text_color(0, 212, 255)
         self.write(5, self.safe_txt("Multiplicador"))
-        
-        self.set_font('Arial', '', 11)
-        self.set_text_color(220, 220, 220)
+        self.set_font('Arial', '', 11); self.set_text_color(220, 220, 220)
         self.write(5, self.safe_txt(", que indica quantas vezes o benefício supera o custo."))
         self.ln(10)
 
     def write_warning_box(self, text):
         self.ln(5)
-        self.set_fill_color(60, 10, 10) # Fundo Vermelho Escuro
-        self.set_draw_color(255, 75, 75) # Borda Vermelha Clara
-        self.set_text_color(255, 200, 200) # Texto Claro
+        self.set_fill_color(60, 10, 10); self.set_draw_color(255, 75, 75); self.set_text_color(255, 200, 200)
         self.set_font('Arial', 'B', 10)
-        
-        # Salva posição Y
         y_start = self.get_y()
         self.rect(10, y_start, 190, 10, 'FD')
         self.set_xy(12, y_start + 2)
         self.cell(0, 6, self.safe_txt(text), 0, 1, 'L')
         self.ln(2)
 
-# --- BARRA LATERAL (AJUSTE 3: Expander) ---
+# --- BARRA LATERAL (Expander) ---
 with st.sidebar:
     st.header("📂 Menu")
-    # Colocamos as opções de salvar/carregar dentro de um expander para esconder/abrir
     with st.expander("💾 Gerenciar Dados (Salvar/Abrir)", expanded=False):
         current_data = {key: st.session_state[key] for key in keys_to_save if key in st.session_state}
         json_str = json.dumps(current_data)
         st.download_button("⬇️ Baixar Preenchimento", json_str, "planejamento.json", "application/json")
-        
         st.divider()
         uploaded_file = st.file_uploader("📂 Carregar Arquivo", type=["json"])
         if uploaded_file and st.button("Confirmar Carregamento"): carregar_dados(uploaded_file)
-        
         st.divider()
         if st.button("🗑️ Limpar Tudo", type="primary"): limpar_dados()
 
@@ -212,7 +196,7 @@ with col_d3:
     if st.session_state.is_casado: st.text_input("Nome do Cônjuge", placeholder="Ex: Maria", key="nome_conjuge")
 
 col_n1, col_n2, col_n3 = st.columns([1.5, 0.5, 1.5])
-ano_atual = datetime.now().year # 2026 conforme contexto
+ano_atual = datetime.now().year
 idade_cliente = 0; idade_conjuge = 0
 regime_casamento = "Separação Total de Bens"; percentual_meacao = 0.0
 
@@ -261,20 +245,19 @@ with col_cus:
     with c_uf: estado_sel = st.selectbox("Estado", ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"], key="estado_selecionado")
     with c_pl: st.write(""); st.write(""); usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
 
-    # --- AJUSTE 1: Lógica do PL n.7 ---
-    # Recalcula a alíquota sugerida com base nos valores ATUAIS
+    # --- LÓGICA DE ATUALIZAÇÃO DO PL (CORRIGIDA) ---
     val_sugerido = 4.0
-    if usar_pl: 
+    if usar_pl:
+        # Se PL estiver ligado, SEMPRE recalcula baseado na base atual
         val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
-        # SE PL ESTIVER LIGADO, FORÇAMOS A ATUALIZAÇÃO DO INPUT PARA ACOMPANHAR O CÁLCULO
-        # Isso garante que se o patrimônio mudar, a alíquota muda junto.
+        # Força a atualização do widget para refletir a faixa correta
         st.session_state.aliq_itcmd_input = val_sugerido
     elif estado_sel == "Minas Gerais (MG)": 
         val_sugerido = 5.0
-        # Se PL desligado, só atualiza se houve mudança de estado para não atrapalhar edição manual
+        # Se PL desligado e mudou estado, atualiza.
         if st.session_state.ultimo_estado_pl != usar_pl:
-             st.session_state.aliq_itcmd_input = val_sugerido
-
+            st.session_state.aliq_itcmd_input = val_sugerido
+            
     st.session_state.ultimo_estado_pl = usar_pl
 
     st.markdown("#### Detalhamento")
@@ -306,9 +289,12 @@ with col_cus:
     """, unsafe_allow_html=True)
     
     aumento_imposto = 0
-    # O aviso agora funcionará pois o aliq_itcmd está sendo atualizado corretamente acima
-    if usar_pl and (base_calculo_imposto * (aliq_itcmd/100)) > (base_calculo_imposto * 0.04):
-        aumento_imposto = (base_calculo_imposto * (aliq_itcmd/100)) - (base_calculo_imposto * 0.04)
+    # Cálculo do Aumento (Comparando com 4% base, que é a média SP atual)
+    custo_base_4pct = base_calculo_imposto * 0.04
+    custo_atual_itcmd = base_calculo_imposto * (aliq_itcmd/100)
+    
+    if usar_pl and custo_atual_itcmd > custo_base_4pct:
+        aumento_imposto = custo_atual_itcmd - custo_base_4pct
         st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency(aumento_imposto)}")
 
 st.write(""); st.subheader("3. Cenário Global")
@@ -348,9 +334,9 @@ data_sim = []
 cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
 anos_para_simular = st.session_state.simulacao_anos 
 
-# --- AJUSTE 2: Loop começando em 0 para incluir o ano atual (2026) ---
-for i in range(0, anos_para_simular):
-    if i < anos_pag: # Menor que anos_pagamento (ex: 0 a 9 = 10 pagamentos)
+# --- CORREÇÃO DA DATA (Começar em 2026) ---
+for i in range(0, anos_para_simular): # Loop começa em 0 para incluir o ano atual
+    if i < anos_pag:
         aporte_str = format_currency(prem_curr)
         acum += prem_curr
         acum_str = format_currency(acum)
@@ -434,8 +420,7 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.create_table_row(headers, header=True)
         
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
-        # Loop PDF também ajustado para range(0, ...)
-        for i in range(0, anos_para_simular):
+        for i in range(0, anos_para_simular): # Ajuste Loop PDF
             if pdf.get_y() > 270: 
                 pdf.add_page()
                 pdf.create_table_row(headers, header=True)
