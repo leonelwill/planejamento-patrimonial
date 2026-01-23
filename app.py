@@ -52,7 +52,7 @@ def format_currency(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def obter_aliquota_pl_sp_fixa(valor_base):
-    # FAIXAS CORRIGIDAS E VERIFICADAS
+    # Lógica de Faixas Progressivas (Fixas por bloco)
     if valor_base <= 353600.00: return 2.0
     elif valor_base <= 3005600.00: return 4.0
     elif valor_base <= 9900800.00: return 6.0
@@ -176,13 +176,13 @@ class PDFReport(FPDF):
 # --- BARRA LATERAL (Expander) ---
 with st.sidebar:
     st.header("📂 Menu")
-    with st.expander("💾 Gerenciar Dados (Salvar/Abrir)", expanded=False):
+    with st.expander("💾 Gerenciar Arquivos", expanded=False):
         current_data = {key: st.session_state[key] for key in keys_to_save if key in st.session_state}
         json_str = json.dumps(current_data)
-        st.download_button("⬇️ Baixar Preenchimento", json_str, "planejamento.json", "application/json")
+        st.download_button("⬇️ Baixar JSON", json_str, "planejamento.json", "application/json")
         st.divider()
-        uploaded_file = st.file_uploader("📂 Carregar Arquivo", type=["json"])
-        if uploaded_file and st.button("Confirmar Carregamento"): carregar_dados(uploaded_file)
+        uploaded_file = st.file_uploader("📂 Carregar JSON", type=["json"])
+        if uploaded_file and st.button("Carregar Dados"): carregar_dados(uploaded_file)
         st.divider()
         if st.button("🗑️ Limpar Tudo", type="primary"): limpar_dados()
 
@@ -196,18 +196,18 @@ with col_d3:
     if st.session_state.is_casado: st.text_input("Nome do Cônjuge", placeholder="Ex: Maria", key="nome_conjuge")
 
 col_n1, col_n2, col_n3 = st.columns([1.5, 0.5, 1.5])
-ano_atual = datetime.now().year
+ano_atual = 2026 # Ano base fixo para a tabela
 idade_cliente = 0; idade_conjuge = 0
 regime_casamento = "Separação Total de Bens"; percentual_meacao = 0.0
 
 with col_n1:
-    ano_cli = st.number_input("Ano Nasc. (Cliente)", 1920, ano_atual, step=1, key="ano_nasc_cliente")
+    ano_cli = st.number_input("Ano Nasc. (Cliente)", 1920, datetime.now().year, step=1, key="ano_nasc_cliente")
     idade_cliente = ano_atual - ano_cli
 with col_n3:
     if st.session_state.is_casado:
         c1, c2 = st.columns(2)
         with c1:
-            ano_conj = st.number_input("Ano Nasc. (Cônjuge)", 1920, ano_atual, step=1, key="ano_nasc_conjuge")
+            ano_conj = st.number_input("Ano Nasc. (Cônjuge)", 1920, datetime.now().year, step=1, key="ano_nasc_conjuge")
             idade_conjuge = ano_atual - ano_conj
         with c2:
             reg = st.selectbox("Regime", ["Comunhão Parcial de Bens", "Comunhão Universal de Bens", "Separação Total de Bens", "Participação Final nos Aquestos"], key="regime_casamento")
@@ -245,20 +245,30 @@ with col_cus:
     with c_uf: estado_sel = st.selectbox("Estado", ["São Paulo (SP)", "Rio de Janeiro (RJ)", "Minas Gerais (MG)", "Outros"], key="estado_selecionado")
     with c_pl: st.write(""); st.write(""); usar_pl = st.toggle("Simular PL n.7/2024 (SP)?", key="toggle_pl")
 
-    # --- LÓGICA DE ATUALIZAÇÃO DO PL (CORRIGIDA) ---
-    val_sugerido = 4.0
+    # --- LÓGICA CORRIGIDA DO PL ---
+    # 1. Determina a alíquota correta
+    val_sugerido = 4.0 # Padrão base
+    
     if usar_pl:
-        # Se PL estiver ligado, SEMPRE recalcula baseado na base atual
+        # Se PL ativo, calcula baseado na tabela progressiva
         val_sugerido = obter_aliquota_pl_sp_fixa(base_calculo_imposto)
-        # Força a atualização do widget para refletir a faixa correta
+        # FORÇA atualização do session_state para refletir no input
         st.session_state.aliq_itcmd_input = val_sugerido
     elif estado_sel == "Minas Gerais (MG)": 
         val_sugerido = 5.0
-        # Se PL desligado e mudou estado, atualiza.
+        # Se desligado e MG, sugere 5 se o usuário não tiver editado
         if st.session_state.ultimo_estado_pl != usar_pl:
             st.session_state.aliq_itcmd_input = val_sugerido
-            
+    else:
+        # Se desligado e SP/Outros, sugere 4 (reset) se acabou de desligar o PL
+        if st.session_state.ultimo_estado_pl != usar_pl:
+            st.session_state.aliq_itcmd_input = 4.0
+
     st.session_state.ultimo_estado_pl = usar_pl
+
+    # 2. Exibe feedback VISUAL se PL estiver ativo
+    if usar_pl:
+        st.info(f"⚡ PL Ativo: Aplicando alíquota de **{val_sugerido}%** para esta faixa de patrimônio.")
 
     st.markdown("#### Detalhamento")
     c1, c2, c3 = st.columns([3, 1.5, 2])
@@ -289,12 +299,13 @@ with col_cus:
     """, unsafe_allow_html=True)
     
     aumento_imposto = 0
-    # Cálculo do Aumento (Comparando com 4% base, que é a média SP atual)
-    custo_base_4pct = base_calculo_imposto * 0.04
-    custo_atual_itcmd = base_calculo_imposto * (aliq_itcmd/100)
+    # Cálculo do Delta para Aviso
+    # Compara o custo calculado AGORA (com a alíquota do input) contra o custo base de 4%
+    custo_pl = base_calculo_imposto * (aliq_itcmd/100)
+    custo_base = base_calculo_imposto * 0.04
     
-    if usar_pl and custo_atual_itcmd > custo_base_4pct:
-        aumento_imposto = custo_atual_itcmd - custo_base_4pct
+    if usar_pl and custo_pl > custo_base:
+        aumento_imposto = custo_pl - custo_base
         st.error(f"🚨 Aumento de Imposto pela Nova Lei: {format_currency(aumento_imposto)}")
 
 st.write(""); st.subheader("3. Cenário Global")
@@ -334,8 +345,8 @@ data_sim = []
 cap_curr = cob_sugerida; prem_curr = premio; acum = 0.0
 anos_para_simular = st.session_state.simulacao_anos 
 
-# --- CORREÇÃO DA DATA (Começar em 2026) ---
-for i in range(0, anos_para_simular): # Loop começa em 0 para incluir o ano atual
+# --- CORREÇÃO DA DATA (Começar em 2026 / Ano 0) ---
+for i in range(0, anos_para_simular): 
     if i < anos_pag:
         aporte_str = format_currency(prem_curr)
         acum += prem_curr
@@ -420,7 +431,7 @@ if st.button("📄 Baixar PDF (Blue Mode)"):
         pdf.create_table_row(headers, header=True)
         
         c_p, p_p, a_p = cob_sugerida, premio, 0.0
-        for i in range(0, anos_para_simular): # Ajuste Loop PDF
+        for i in range(0, anos_para_simular): 
             if pdf.get_y() > 270: 
                 pdf.add_page()
                 pdf.create_table_row(headers, header=True)
